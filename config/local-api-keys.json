@@ -1,0 +1,8 @@
+{
+  "virusTotal": {
+    "apiKey": "YOUR_VIRUSTOTAL_API_KEY"
+  },
+  "bff": {
+    "baseUrl": ""
+  }
+}
