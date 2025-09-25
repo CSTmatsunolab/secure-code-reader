@@ -30,7 +30,10 @@ const sanitizeKey = (value?: string) => {
 
 export const getVirusTotalApiKey = (): string | undefined => sanitizeKey(localConfig.virusTotal?.apiKey);
 
-export const isVirusTotalConfigured = (): boolean => Boolean(getVirusTotalApiKey());
+export const isVirusTotalConfigured = (): boolean => {
+  // VirusTotalのAPIキーが設定されているか、BFFのベースURLが設定されていればOK
+  return Boolean(getVirusTotalApiKey()) || Boolean(getBffBaseUrl());
+};
 
 export const getBffBaseUrl = (): string | undefined => {
   const trimmed = localConfig.bff?.baseUrl?.trim();

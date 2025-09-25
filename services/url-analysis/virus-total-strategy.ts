@@ -1,4 +1,4 @@
-import { getVirusTotalApiKey } from '@/services/config/api-key-provider';
+import { getBffBaseUrl, getVirusTotalApiKey } from '@/services/config/api-key-provider';
 
 import type {
   AnalysisStatus,
@@ -9,7 +9,12 @@ import type {
   UrlVerdict,
 } from './types';
 
-const API_BASE_URL = 'https://www.virustotal.com/api/v3';
+//BFFが設定されているときにはVirusTotalのAPIを直接使わない
+const getApiBaseUrl = () => {
+  const bffBaseUrl = getBffBaseUrl();
+  return bffBaseUrl || 'https://www.virustotal.com/api/v3';
+}
+
 const GUI_BASE_URL = 'https://www.virustotal.com/gui';
 const POLL_INTERVAL_MS = 1500;
 const MAX_POLL_ATTEMPTS = 10;
@@ -185,20 +190,32 @@ const normalizeResult = (analysis: VirusTotalAnalysisResponse, submittedUrl: str
 };
 
 export const analyzeViaVirusTotal = async (url: string): Promise<UrlAnalysisResult> => {
-  const apiKey = getVirusTotalApiKey();
-
-  if (!apiKey) {
-    throw new Error(
-      'VirusTotal APIキーが設定されていません。config/local-api-keys.json を更新してください。',
-    );
-  }
-
-  const submissionResponse = await fetch(`${API_BASE_URL}/urls`, {
-    method: 'POST',
-    headers: {
+  const bffBaseUrl = getBffBaseUrl();
+  const apiBaseUrl = getApiBaseUrl();
+  
+  // BFF使用時はAPIキー不要、直接VT使用時は必要
+  let headers: Record<string, string>;
+  
+  if (bffBaseUrl) {
+    headers = {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    };
+  } else {
+    const apiKey = getVirusTotalApiKey();
+    if (!apiKey) {
+      throw new Error(
+        'VirusTotal APIキーが設定されていません。config/local-api-keys.json を更新してください。',
+      );
+    }
+    headers = {
       'Content-Type': 'application/x-www-form-urlencoded',
       'x-apikey': apiKey,
-    },
+    };
+  }
+
+  const submissionResponse = await fetch(`${apiBaseUrl}/urls`, {
+    method: 'POST',
+    headers,
     body: `url=${encodeURIComponent(url)}`,
   });
 
@@ -210,15 +227,15 @@ export const analyzeViaVirusTotal = async (url: string): Promise<UrlAnalysisResu
   const analysisId = submissionJson.data?.id;
 
   if (!analysisId) {
-    throw new Error('VirusTotal の解析IDを取得できませんでした。');
+    throw new Error('解析IDを取得できませんでした。');
   }
 
   const fetchAnalysis = async (): Promise<VirusTotalAnalysisResponse> => {
-    const response = await fetch(`${API_BASE_URL}/analyses/${analysisId}`, {
+    const analysisHeaders = bffBaseUrl ? {} : { 'x-apikey': getVirusTotalApiKey()! };
+    
+    const response = await fetch(`${apiBaseUrl}/analyses/${analysisId}`, {
       method: 'GET',
-      headers: {
-        'x-apikey': apiKey,
-      },
+      headers: bffBaseUrl ? {} : { 'x-apikey': getVirusTotalApiKey()! },
     });
 
     if (!response.ok) {

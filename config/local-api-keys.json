@@ -1,8 +1,8 @@
 {
   "virusTotal": {
-    "apiKey": "a3a5a544f9f16ffc98d7b622851c85ffbdb743de893100ec8dd9917f7ba74b0a"
+    "apiKey": ""
   },
   "bff": {
-    "baseUrl": ""
+    "baseUrl": "https://yd0agmfx7f.execute-api.ap-northeast-1.amazonaws.com"
   }
 }
