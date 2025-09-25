@@ -2,6 +2,7 @@ import type {
   AnalysisStatus,
   EngineFinding,
   EngineTone,
+  InternalListResult,
   ScanStats,
   UrlAnalysisResult,
   UrlVerdict,
@@ -158,7 +159,31 @@ const normalizeEngineFindings = (
   return findings.length > 0 ? findings : undefined;
 };
 
-const normalizeResult = (analysis: BffAnalysisResponse, submittedUrl: string): UrlAnalysisResult => {
+// 内部リスト照会（DynamoDB）
+const checkInternalList = async (url: string, baseUrl: string): Promise<InternalListResult | undefined> => {
+  try {
+    const response = await fetch(`${baseUrl}/resolve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ url }),
+    });
+
+    if (!response.ok) {
+      console.warn(`内部リスト照会に失敗: ${response.status} ${response.statusText}`);
+      return undefined;
+    }
+
+    const result = await response.json() as InternalListResult;
+    return result;
+  } catch (error) {
+    console.warn('内部リスト照会でエラー:', error);
+    return undefined;
+  }
+};
+
+const normalizeResult = (analysis: BffAnalysisResponse, submittedUrl: string, internalListResult?: InternalListResult): UrlAnalysisResult => {
   if (!analysis.data || !analysis.data.id) {
     throw new Error('BFFの解析レスポンスを解釈できませんでした。');
   }
@@ -177,6 +202,7 @@ const normalizeResult = (analysis: BffAnalysisResponse, submittedUrl: string): U
     startedAt: analysis.data.attributes?.date ? analysis.data.attributes?.date * 1000 : undefined,
     detailsUrl: buildDetailsUrl(analysis.data.id),
     engineFindings,
+    internalListResult,
     raw: analysis,
   };
 };
@@ -197,8 +223,6 @@ export async function analyzeViaBff(url: string, baseUrl: string): Promise<UrlAn
 
   const submissionJson = (await submissionResponse.json()) as BffSubmissionResponse;
   const analysisId = submissionJson.data?.id;
-  //analysisIdのテスト的なコンソール表示
-  console.log('BFF Analysis ID:', analysisId);
 
   if (!analysisId) {
     throw new Error('解析IDを取得できませんでした。');
@@ -231,5 +255,9 @@ export async function analyzeViaBff(url: string, baseUrl: string): Promise<UrlAn
     attempts += 1;
   }
 
-  return result;
+  // 3. VirusTotal解析完了後に内部リスト照会を実行
+  const internalListResult = await checkInternalList(url, baseUrl);
+  
+  // 最終結果に内部リストの結果を含めて再構築
+  return normalizeResult(analysisJson, url, internalListResult);
 }

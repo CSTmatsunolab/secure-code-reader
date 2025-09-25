@@ -20,6 +20,13 @@ export interface EngineFinding {
   threat?: string;
 }
 
+export interface InternalListResult {
+  listed: boolean;
+  serviceName: string | null;
+  category: string | null;
+  notice: string | null;
+}
+
 export interface UrlAnalysisResult {
   id: string;
   provider: 'virusTotal' | 'bff';
@@ -30,5 +37,6 @@ export interface UrlAnalysisResult {
   startedAt?: number;
   detailsUrl?: string;
   engineFindings?: EngineFinding[];
+  internalListResult?: InternalListResult;
   raw?: unknown;
 }

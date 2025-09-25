@@ -6,7 +6,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
 import { Palette } from '@/constants/theme';
-import type { UrlAnalysisResult, UrlVerdict } from '@/services/url-analysis';
+import type { InternalListResult, UrlAnalysisResult, UrlVerdict } from '@/services/url-analysis';
 
 type Props = {
   result: UrlAnalysisResult;
@@ -51,6 +51,47 @@ const StatBadge = memo(function StatBadge({
   );
 });
 
+const InternalListWarning = memo(function InternalListWarning({
+  result,
+}: {
+  result: InternalListResult;
+}) {
+  return (
+    <ThemedView style={styles.warningCard}>
+      <View style={styles.warningHeader}>
+        <ThemedText type="title" style={styles.warningTitle}>
+          ⚠️ 注意が必要なサービス
+        </ThemedText>
+        <ThemedText style={styles.warningSubtitle}>
+          内部リストに登録されているサービスです
+        </ThemedText>
+      </View>
+      <View style={styles.warningDetails}>
+        <View style={styles.warningDetailRow}>
+          <ThemedText type="defaultSemiBold" style={styles.warningLabel}>
+            サービス名
+          </ThemedText>
+          <ThemedText style={styles.warningValue}>{result.serviceName}</ThemedText>
+        </View>
+        <View style={styles.warningDetailRow}>
+          <ThemedText type="defaultSemiBold" style={styles.warningLabel}>
+            カテゴリ
+          </ThemedText>
+          <ThemedText style={styles.warningValue}>{result.category}</ThemedText>
+        </View>
+        {result.notice ? (
+          <View style={styles.warningNoticeContainer}>
+            <ThemedText type="defaultSemiBold" style={styles.warningLabel}>
+              注意事項
+            </ThemedText>
+            <ThemedText style={styles.warningNotice}>{result.notice}</ThemedText>
+          </View>
+        ) : null}
+      </View>
+    </ThemedView>
+  );
+});
+
 export const ScanResultCard = memo(function ScanResultCard({ result }: Props) {
   const findings = result.engineFindings ?? [];
   const summary = useMemo(() => {
@@ -72,6 +113,11 @@ export const ScanResultCard = memo(function ScanResultCard({ result }: Props) {
 
   return (
     <ThemedView style={styles.card}>
+      {/* 内部リストの警告を最初に表示（listed: true の場合のみ） */}
+      {result.internalListResult?.listed && (
+        <InternalListWarning result={result.internalListResult} />
+      )}
+      
       <ThemedText type="title" style={[styles.verdictTitle, { color: verdictColor[result.verdict] }]}>
         {verdictLabel[result.verdict]}
       </ThemedText>
@@ -89,7 +135,7 @@ export const ScanResultCard = memo(function ScanResultCard({ result }: Props) {
         />
       </View>
       {result.detailsUrl ? (
-        <ExternalLink href={result.detailsUrl}>
+        <ExternalLink href={result.detailsUrl as any}>
           <ThemedText type="link">VirusTotalで詳細を確認</ThemedText>
         </ExternalLink>
       ) : null}
@@ -182,5 +228,56 @@ const styles = StyleSheet.create({
   findingsNote: {
     fontSize: 12,
     color: Palette.textSubtle,
+  },
+  // 内部リスト警告のスタイル
+  warningCard: {
+    gap: 16,
+    padding: 18,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#F9AB00',
+    backgroundColor: 'rgba(249, 171, 0, 0.08)',
+    marginBottom: 16,
+  },
+  warningHeader: {
+    gap: 4,
+  },
+  warningTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#C47F00',
+  },
+  warningSubtitle: {
+    fontSize: 14,
+    color: '#C47F00',
+  },
+  warningDetails: {
+    gap: 12,
+  },
+  warningDetailRow: {
+    gap: 4,
+  },
+  warningLabel: {
+    fontSize: 13,
+    color: '#8B5A00',
+  },
+  warningValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333333',
+  },
+  warningNoticeContainer: {
+    gap: 6,
+    marginTop: 4,
+  },
+  warningNotice: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#333333',
+  },
+  warningFooter: {
+    fontSize: 13,
+    color: '#8B5A00',
+    fontStyle: 'italic',
   },
 });

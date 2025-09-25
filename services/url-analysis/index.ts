@@ -1,8 +1,8 @@
 import { getBffBaseUrl } from '@/services/config/api-key-provider';
 
 import { analyzeViaBff } from './bff-strategy';
-import { analyzeViaVirusTotal } from './virus-total-strategy';
 import type { UrlAnalysisResult } from './types';
+import { analyzeViaVirusTotal } from './virus-total-strategy';
 
 export const analyzeUrl = async (url: string): Promise<UrlAnalysisResult> => {
   const trimmed = url.trim();
@@ -18,4 +18,5 @@ export const analyzeUrl = async (url: string): Promise<UrlAnalysisResult> => {
   return analyzeViaVirusTotal(trimmed);
 };
 
-export type { AnalysisStatus, ScanStats, UrlAnalysisResult, UrlVerdict } from './types';
+export type { AnalysisStatus, InternalListResult, ScanStats, UrlAnalysisResult, UrlVerdict } from './types';
+
