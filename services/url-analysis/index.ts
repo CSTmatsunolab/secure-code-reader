@@ -1,6 +1,7 @@
 import { getBffBaseUrl } from '@/services/config/api-key-provider';
 
 import { analyzeViaBff } from './bff-strategy';
+import { checkInternalListOnly } from './internal-list-strategy';
 import type { UrlAnalysisResult } from './types';
 import { analyzeViaVirusTotal } from './virus-total-strategy';
 
@@ -19,4 +20,5 @@ export const analyzeUrl = async (url: string): Promise<UrlAnalysisResult> => {
 };
 
 export type { AnalysisStatus, InternalListResult, ScanStats, UrlAnalysisResult, UrlVerdict } from './types';
+export { checkInternalListOnly };
 

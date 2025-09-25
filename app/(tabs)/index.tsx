@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { RiskConfirmDialog } from '@/components/dialogs/risk-confirm-dialog';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { RiskConfirmDialog } from '@/components/dialogs/risk-confirm-dialog';
 import { Palette } from '@/constants/theme';
 import { PayloadSummaryCard } from '@/features/payload-summary/components/payload-summary-card';
 import { QrCameraView } from '@/features/qr-capture/components/qr-camera-view';
@@ -15,6 +15,7 @@ import { UrlScanForm } from '@/features/url-scan/components/url-scan-form';
 import { classifyQrPayload } from '@/services/payload-classifier/parser';
 import type { ClassifiedPayload } from '@/services/payload-classifier/types';
 import type { UrlAnalysisResult } from '@/services/url-analysis';
+import { checkInternalListOnly } from '@/services/url-analysis';
 
 export default function ScanScreen() {
   const {
@@ -39,6 +40,7 @@ export default function ScanScreen() {
   const { entries, addEntry, updateEntryAnalysis } = useScanHistory();
   const { useVirusTotal, alwaysShowStrongWarning } = useSettings();
   const [isDetailsVisible, setIsDetailsVisible] = useState(false);
+  const [isCheckingInternalList, setIsCheckingInternalList] = useState(false);
   const [riskDialog, setRiskDialog] = useState({
     visible: false,
     tone: 'info' as 'danger' | 'warning' | 'info',
@@ -127,42 +129,61 @@ export default function ScanScreen() {
           if (!classification.normalizedUrl) {
             return;
           }
-          const verdict = currentEntry?.analysis?.verdict;
-          const requiresPrompt =
-            alwaysShowStrongWarning || verdict === 'danger' || verdict === 'warning';
+          
+          try {
+            // 内部リスト照会開始
+            setIsCheckingInternalList(true);
+            const internalListResult = await checkInternalListOnly(classification.normalizedUrl);
+            
+            const verdict = currentEntry?.analysis?.verdict;
+            const requiresPrompt =
+              alwaysShowStrongWarning || 
+              verdict === 'danger' || 
+              verdict === 'warning' ||
+              internalListResult?.listed; // 内部リストにある場合も確認を促す
 
-          const proceed = () => {
-            Linking.openURL(classification.normalizedUrl).catch((err) => {
-              Alert.alert(
-                'リンクを開けません',
-                err instanceof Error ? err.message : '不明なエラーが発生しました。',
-              );
-            });
-          };
+            const proceed = () => {
+              Linking.openURL(classification.normalizedUrl).catch((err) => {
+                Alert.alert(
+                  'リンクを開けません',
+                  err instanceof Error ? err.message : '不明なエラーが発生しました。',
+                );
+              });
+            };
 
-          if (requiresPrompt) {
-            let message =
-              '送金リンクやディープリンクの可能性があります。続行する前に内容を必ず確認してください。';
-            let tone: 'danger' | 'warning' | 'info' = 'warning';
+            if (requiresPrompt) {
+              let message =
+                '送金リンクやディープリンクの可能性があります。続行する前に内容を必ず確認してください。';
+              let tone: 'danger' | 'warning' | 'info' = 'warning';
 
-            if (verdict === 'danger') {
-              message = 'VirusTotal で危険と判定されたリンクです。内容を十分に確認した上で続行してください。';
-              tone = 'danger';
-            } else if (verdict === 'warning') {
-              message = 'VirusTotal で注意が必要と判定されています。送信元を再確認し十分に注意してください。';
+              if (verdict === 'danger') {
+                message = 'VirusTotal で危険と判定されたリンクです。内容を十分に確認した上で続行してください。';
+                tone = 'danger';
+              } else if (verdict === 'warning') {
+                message = 'VirusTotal で注意が必要と判定されています。送信元を再確認し十分に注意してください。';
+              } else if (internalListResult?.listed) {
+                // 内部リストに登録されている場合の警告メッセージ
+                const serviceName = internalListResult.serviceName || 'このサービス';
+                const notice = internalListResult.notice || '内容を十分に確認してください。';
+                message = `${serviceName}のリンクが検出されました。${notice}\n\n続行する前に、送金や個人情報の入力が必要でないか確認してください。`;
+                tone = 'warning';
+              }
+
+              setRiskDialog({
+                visible: true,
+                tone,
+                title: internalListResult?.listed ? '登録済みサービスの確認' : '安全性の確認',
+                message,
+                onConfirm: proceed,
+              });
+              return;
             }
 
-            setRiskDialog({
-              visible: true,
-              tone,
-              title: '安全性の確認',
-              message,
-              onConfirm: proceed,
-            });
-            return;
+            await Linking.openURL(classification.normalizedUrl);
+          } finally {
+            // 内部リスト照会完了
+            setIsCheckingInternalList(false);
           }
-
-          await Linking.openURL(classification.normalizedUrl);
           break;
         case 'phone':
           await Linking.openURL(`tel:${classification.phoneNumber}`);
@@ -270,6 +291,7 @@ export default function ScanScreen() {
             onScanAgain={handleRescan}
             onPrimaryAction={primaryActionLabel ? handlePrimaryAction : undefined}
             primaryActionLabel={primaryActionLabel}
+            isLoadingPrimaryAction={isCheckingInternalList}
           />
         ) : null}
         {isDetailsVisible && classifiedPayload?.classification.kind === 'url' ? (
@@ -286,14 +308,6 @@ export default function ScanScreen() {
           )
         ) : null}
       </ScrollView>
-      <RiskConfirmDialog
-        visible={riskDialog.visible}
-        tone={riskDialog.tone}
-        title={riskDialog.title}
-        message={riskDialog.message}
-        onConfirm={handleRiskConfirm}
-        onCancel={hideRiskDialog}
-      />
       <RiskConfirmDialog
         visible={riskDialog.visible}
         tone={riskDialog.tone}

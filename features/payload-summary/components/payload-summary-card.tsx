@@ -1,9 +1,8 @@
 import { memo } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { InfoTooltip } from '@/components/ui/info-tooltip';
 import { Palette } from '@/constants/theme';
 
 import { ClassifiedPayload } from '@/services/payload-classifier/types';
@@ -13,6 +12,7 @@ interface Props {
   onScanAgain: () => void;
   onPrimaryAction?: () => void;
   primaryActionLabel?: string;
+  isLoadingPrimaryAction?: boolean;
 }
 
 const kindLabel: Record<ClassifiedPayload['classification']['kind'], string> = {
@@ -27,6 +27,7 @@ export const PayloadSummaryCard = memo(function PayloadSummaryCard({
   onScanAgain,
   onPrimaryAction,
   primaryActionLabel,
+  isLoadingPrimaryAction = false,
 }: Props) {
   const { classification, summary } = payload;
 
@@ -56,29 +57,29 @@ export const PayloadSummaryCard = memo(function PayloadSummaryCard({
         </View>
       ) : null}
       <View style={styles.rawContainer}>
-        <View style={styles.rawHeader}>
-          <ThemedText type="defaultSemiBold" style={styles.rawLabel}>
-            生データ
-          </ThemedText>
-          <InfoTooltip
-            title="生データとは"
-            description="QR コードに格納されていた文字列をそのまま表示しています。リンクを開く前に内容を確認する際に利用できます。"
-          />
-        </View>
+        <ThemedText type="defaultSemiBold" style={styles.rawLabel}>
+          生データ
+        </ThemedText>
         <ThemedText style={styles.rawValue}>{classification.rawValue}</ThemedText>
       </View>
       <View style={styles.actions}>
         {primaryActionLabel && onPrimaryAction ? (
           <Pressable
             accessibilityRole="button"
+            disabled={isLoadingPrimaryAction}
             style={({ pressed }) => [
               styles.primaryButton,
-              pressed ? styles.primaryButtonPressed : null,
+              isLoadingPrimaryAction && styles.primaryButtonLoading,
+              pressed && !isLoadingPrimaryAction ? styles.primaryButtonPressed : null,
             ]}
             onPress={onPrimaryAction}>
-            <ThemedText type="defaultSemiBold" style={styles.primaryLabel}>
-              {primaryActionLabel}
-            </ThemedText>
+            {isLoadingPrimaryAction ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <ThemedText type="defaultSemiBold" style={styles.primaryLabel}>
+                {primaryActionLabel}
+              </ThemedText>
+            )}
           </Pressable>
         ) : null}
         <Pressable
@@ -145,11 +146,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Palette.cardBorder,
   },
-  rawHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
   rawLabel: {
     fontSize: 12,
     color: Palette.textSubtle,
@@ -170,6 +166,9 @@ const styles = StyleSheet.create({
   },
   primaryButtonPressed: {
     opacity: 0.92,
+  },
+  primaryButtonLoading: {
+    opacity: 0.7,
   },
   primaryLabel: {
     color: '#ffffff',
