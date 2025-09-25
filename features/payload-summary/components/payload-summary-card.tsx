@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { InfoTooltip } from '@/components/ui/info-tooltip';
 import { Palette } from '@/constants/theme';
 
 import { ClassifiedPayload } from '@/services/payload-classifier/types';
@@ -55,9 +56,15 @@ export const PayloadSummaryCard = memo(function PayloadSummaryCard({
         </View>
       ) : null}
       <View style={styles.rawContainer}>
-        <ThemedText type="defaultSemiBold" style={styles.rawLabel}>
-          生データ
-        </ThemedText>
+        <View style={styles.rawHeader}>
+          <ThemedText type="defaultSemiBold" style={styles.rawLabel}>
+            生データ
+          </ThemedText>
+          <InfoTooltip
+            title="生データとは"
+            description="QR コードに格納されていた文字列をそのまま表示しています。リンクを開く前に内容を確認する際に利用できます。"
+          />
+        </View>
         <ThemedText style={styles.rawValue}>{classification.rawValue}</ThemedText>
       </View>
       <View style={styles.actions}>
@@ -137,6 +144,11 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: Palette.cardBorder,
+  },
+  rawHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   rawLabel: {
     fontSize: 12,

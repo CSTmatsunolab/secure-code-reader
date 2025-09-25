@@ -10,6 +10,16 @@ export interface ScanStats {
   timeout: number;
 }
 
+export type EngineTone = 'danger' | 'warning' | 'info';
+
+export interface EngineFinding {
+  engine: string;
+  category: string;
+  categoryLabel: string;
+  tone: EngineTone;
+  threat?: string;
+}
+
 export interface UrlAnalysisResult {
   id: string;
   provider: 'virusTotal' | 'bff';
@@ -19,5 +29,6 @@ export interface UrlAnalysisResult {
   stats: ScanStats;
   startedAt?: number;
   detailsUrl?: string;
+  engineFindings?: EngineFinding[];
   raw?: unknown;
 }

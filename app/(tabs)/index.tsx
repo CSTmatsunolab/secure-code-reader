@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { RiskConfirmDialog } from '@/components/dialogs/risk-confirm-dialog';
 import { Palette } from '@/constants/theme';
 import { PayloadSummaryCard } from '@/features/payload-summary/components/payload-summary-card';
 import { QrCameraView } from '@/features/qr-capture/components/qr-camera-view';
@@ -38,6 +39,13 @@ export default function ScanScreen() {
   const { entries, addEntry, updateEntryAnalysis } = useScanHistory();
   const { useVirusTotal, alwaysShowStrongWarning } = useSettings();
   const [isDetailsVisible, setIsDetailsVisible] = useState(false);
+  const [riskDialog, setRiskDialog] = useState({
+    visible: false,
+    tone: 'info' as 'danger' | 'warning' | 'info',
+    title: '',
+    message: '',
+    onConfirm: undefined as (() => void) | undefined,
+  });
 
   const lastLoggedId = useRef<string | null>(null);
 
@@ -55,6 +63,16 @@ export default function ScanScreen() {
     }
     return entries.find((entry) => entry.id === currentEntryId);
   }, [entries, currentEntryId]);
+
+  const hideRiskDialog = useCallback(() => {
+    setRiskDialog((prev) => ({ ...prev, visible: false, onConfirm: undefined }));
+  }, []);
+
+  const handleRiskConfirm = useCallback(() => {
+    const action = riskDialog.onConfirm;
+    hideRiskDialog();
+    action?.();
+  }, [riskDialog, hideRiskDialog]);
 
   useEffect(() => {
     if (result && classifiedPayload && currentEntryId) {
@@ -110,33 +128,40 @@ export default function ScanScreen() {
             return;
           }
           const verdict = currentEntry?.analysis?.verdict;
-          const requiresPrompt = alwaysShowStrongWarning || verdict === 'danger';
+          const requiresPrompt =
+            alwaysShowStrongWarning || verdict === 'danger' || verdict === 'warning';
+
+          const proceed = () => {
+            Linking.openURL(classification.normalizedUrl).catch((err) => {
+              Alert.alert(
+                'リンクを開けません',
+                err instanceof Error ? err.message : '不明なエラーが発生しました。',
+              );
+            });
+          };
+
           if (requiresPrompt) {
-            const message =
-              verdict === 'danger'
-                ? 'VirusTotal で危険と判定されたリンクです。内容を十分に確認した上で続行してください。'
-                : '送金リンクやディープリンクの可能性があります。続行する前に内容を必ず確認してください。';
-            Alert.alert(
-              '安全性の確認',
+            let message =
+              '送金リンクやディープリンクの可能性があります。続行する前に内容を必ず確認してください。';
+            let tone: 'danger' | 'warning' | 'info' = 'warning';
+
+            if (verdict === 'danger') {
+              message = 'VirusTotal で危険と判定されたリンクです。内容を十分に確認した上で続行してください。';
+              tone = 'danger';
+            } else if (verdict === 'warning') {
+              message = 'VirusTotal で注意が必要と判定されています。送信元を再確認し十分に注意してください。';
+            }
+
+            setRiskDialog({
+              visible: true,
+              tone,
+              title: '安全性の確認',
               message,
-              [
-                { text: 'キャンセル', style: 'cancel' },
-                {
-                  text: '続行',
-                  style: 'default',
-                  onPress: () => {
-                    Linking.openURL(classification.normalizedUrl).catch((err) => {
-                      Alert.alert(
-                        'リンクを開けません',
-                        err instanceof Error ? err.message : '不明なエラーが発生しました。',
-                      );
-                    });
-                  },
-                },
-              ],
-            );
+              onConfirm: proceed,
+            });
             return;
           }
+
           await Linking.openURL(classification.normalizedUrl);
           break;
         case 'phone':
@@ -182,11 +207,9 @@ export default function ScanScreen() {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled">
         <ThemedView style={styles.heroCard}>
-          <View style={styles.heroHeading}>
-            <ThemedText type="title" style={styles.heroTitle}>
-              セキュアコードリーダ
-            </ThemedText>
-          </View>
+          <ThemedText type="title" style={styles.heroTitle}>
+            QR セキュリティスキャン
+          </ThemedText>
         </ThemedView>
         <View style={styles.cameraContainer}>
           <QrCameraView
@@ -263,6 +286,22 @@ export default function ScanScreen() {
           )
         ) : null}
       </ScrollView>
+      <RiskConfirmDialog
+        visible={riskDialog.visible}
+        tone={riskDialog.tone}
+        title={riskDialog.title}
+        message={riskDialog.message}
+        onConfirm={handleRiskConfirm}
+        onCancel={hideRiskDialog}
+      />
+      <RiskConfirmDialog
+        visible={riskDialog.visible}
+        tone={riskDialog.tone}
+        title={riskDialog.title}
+        message={riskDialog.message}
+        onConfirm={handleRiskConfirm}
+        onCancel={hideRiskDialog}
+      />
     </SafeAreaView>
   );
 }

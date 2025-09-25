@@ -13,6 +13,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { InfoTooltip } from '@/components/ui/info-tooltip';
+import { RiskConfirmDialog } from '@/components/dialogs/risk-confirm-dialog';
 import { Palette } from '@/constants/theme';
 import { useScanHistory } from '@/features/scan-history/hooks/use-scan-history';
 import type { ScanHistoryEntry } from '@/features/scan-history/history-context';
@@ -80,6 +82,13 @@ export default function HistoryScreen() {
   const [query, setQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+  const [riskDialog, setRiskDialog] = useState({
+    visible: false,
+    tone: 'info' as 'danger' | 'warning' | 'info',
+    title: '',
+    message: '',
+    onConfirm: undefined as (() => void) | undefined,
+  });
 
   const normalizedQuery = query.trim().toLowerCase();
 
@@ -106,6 +115,16 @@ export default function HistoryScreen() {
     setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'));
   }, []);
 
+  const hideRiskDialog = useCallback(() => {
+    setRiskDialog((prev) => ({ ...prev, visible: false, onConfirm: undefined }));
+  }, []);
+
+  const handleRiskConfirm = useCallback(() => {
+    const action = riskDialog.onConfirm;
+    hideRiskDialog();
+    action?.();
+  }, [riskDialog, hideRiskDialog]);
+
   const handleOpenUrl = useCallback(
     (entry: ScanHistoryEntry) => {
       const classification = entry.payload.classification;
@@ -126,16 +145,22 @@ export default function HistoryScreen() {
       if (requiresPrompt) {
         let message =
           '送金リンクやディープリンクの可能性があります。続行する前に内容を必ず確認してください。';
+        let tone: 'danger' | 'warning' | 'info' = 'warning';
         if (verdict === 'danger') {
           message = 'VirusTotal で危険と判定されたリンクです。内容を十分に確認した上で続行してください。';
+          tone = 'danger';
         } else if (verdict === 'warning') {
           message = 'VirusTotal で注意が必要と判定されています。送信元を再確認し十分に注意してください。';
+          tone = 'warning';
         }
 
-        Alert.alert('安全性の確認', message, [
-          { text: 'キャンセル', style: 'cancel' },
-          { text: '続行', style: 'default', onPress: proceed },
-        ]);
+        setRiskDialog({
+          visible: true,
+          tone,
+          title: '安全性の確認',
+          message,
+          onConfirm: proceed,
+        });
         return;
       }
 
@@ -248,6 +273,7 @@ export default function HistoryScreen() {
               const verdict = entry.analysis?.verdict;
               const badgePalette = verdictBadgeColors[verdict ?? 'unknown'];
               const verdictLabelDisplay = verdict ? verdictLabel[verdict] : null;
+              const primaryFinding = entry.analysis?.engineFindings?.[0];
               const isDanger = verdict === 'danger';
               const isSubmittingAnalysis = analyzingId === entry.id;
 
@@ -285,9 +311,39 @@ export default function HistoryScreen() {
                     <ThemedText style={styles.cardSubtitle}>{summary.subtitle}</ThemedText>
                   ) : null}
                   <View style={styles.cardBody}>
-                    <ThemedText style={styles.cardRawLabel}>生データ</ThemedText>
+                    <View style={styles.cardRawHeader}>
+                      <ThemedText style={styles.cardRawLabel}>生データ</ThemedText>
+                      <InfoTooltip
+                        title="生データとは"
+                        description="QR コード内の文字列をそのまま表示しています。コピーしたい場合や、リンク先を開く前に確認したい場合に参照してください。"
+                        placement="bottom"
+                      />
+                    </View>
                     <ThemedText style={styles.cardRawValue}>{classification.rawValue}</ThemedText>
                   </View>
+                  {primaryFinding ? (
+                    <View style={styles.cardFinding}>
+                      <View
+                        style={[
+                          styles.cardFindingBadge,
+                          primaryFinding.tone === 'danger'
+                            ? styles.cardFindingBadgeDanger
+                            : styles.cardFindingBadgeWarning,
+                        ]}>
+                        <ThemedText type="defaultSemiBold" style={styles.cardFindingBadgeText}>
+                          {primaryFinding.categoryLabel}
+                        </ThemedText>
+                      </View>
+                      <ThemedText style={styles.cardFindingEngine}>
+                        {primaryFinding.engine}
+                      </ThemedText>
+                      {primaryFinding.threat ? (
+                        <ThemedText style={styles.cardFindingThreat}>
+                          {primaryFinding.threat}
+                        </ThemedText>
+                      ) : null}
+                    </View>
+                  ) : null}
                   {showActions ? (
                     <View style={styles.cardActions}>
                       {isUrl ? (
@@ -346,6 +402,14 @@ export default function HistoryScreen() {
           </View>
         )}
       </ScrollView>
+      <RiskConfirmDialog
+        visible={riskDialog.visible}
+        tone={riskDialog.tone}
+        title={riskDialog.title}
+        message={riskDialog.message}
+        onConfirm={handleRiskConfirm}
+        onCancel={hideRiskDialog}
+      />
     </SafeAreaView>
   );
 }
@@ -486,6 +550,11 @@ const styles = StyleSheet.create({
   cardBody: {
     gap: 8,
   },
+  cardRawHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   cardRawLabel: {
     fontSize: 12,
     color: Palette.textSubtle,
@@ -494,6 +563,38 @@ const styles = StyleSheet.create({
     fontFamily: 'ui-monospace',
     fontSize: 14,
     lineHeight: 20,
+  },
+  cardFinding: {
+    gap: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Palette.cardBorder,
+    padding: 12,
+    backgroundColor: Palette.surfaceMuted,
+  },
+  cardFindingBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  cardFindingBadgeDanger: {
+    backgroundColor: 'rgba(217, 48, 37, 0.16)',
+  },
+  cardFindingBadgeWarning: {
+    backgroundColor: 'rgba(196, 127, 0, 0.16)',
+  },
+  cardFindingBadgeText: {
+    fontSize: 12,
+    color: '#11181C',
+  },
+  cardFindingEngine: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  cardFindingThreat: {
+    fontSize: 14,
+    color: Palette.textMuted,
   },
   cardActions: {
     flexDirection: 'row',

@@ -1,6 +1,13 @@
 import { getVirusTotalApiKey } from '@/services/config/api-key-provider';
 
-import type { AnalysisStatus, ScanStats, UrlAnalysisResult, UrlVerdict } from './types';
+import type {
+  AnalysisStatus,
+  EngineFinding,
+  EngineTone,
+  ScanStats,
+  UrlAnalysisResult,
+  UrlVerdict,
+} from './types';
 
 const API_BASE_URL = 'https://www.virustotal.com/api/v3';
 const GUI_BASE_URL = 'https://www.virustotal.com/gui';
@@ -13,6 +20,12 @@ type VirusTotalSubmissionResponse = {
   };
 };
 
+type VirusTotalEngineResult = {
+  category?: string;
+  result?: string | null;
+  method?: string | null;
+};
+
 type VirusTotalAnalysisResponse = {
   data?: {
     id: string;
@@ -20,6 +33,7 @@ type VirusTotalAnalysisResponse = {
       status?: string;
       stats?: Partial<ScanStats>;
       date?: number;
+      results?: Record<string, VirusTotalEngineResult>;
     };
   };
 };
@@ -80,6 +94,73 @@ const extractError = async (response: Response): Promise<string> => {
   }
 };
 
+const keywordPatterns: Array<{ pattern: RegExp; label: string; tone: EngineTone }> = [
+  { pattern: /malware|trojan|worm|backdoor/i, label: 'マルウェア検出', tone: 'danger' },
+  { pattern: /phishing|credential/i, label: 'フィッシング疑い', tone: 'danger' },
+  { pattern: /ransom/i, label: 'ランサムウェア疑い', tone: 'danger' },
+  { pattern: /spam|junk/i, label: 'スパムの可能性', tone: 'warning' },
+  { pattern: /suspicious|riskware|grayware/i, label: '注意が必要', tone: 'warning' },
+  { pattern: /scam|fraud/i, label: '詐欺サイト疑い', tone: 'danger' },
+  { pattern: /malicious/i, label: '危険', tone: 'danger' },
+];
+
+const translateEngineFinding = (
+  engine: string,
+  data?: VirusTotalEngineResult,
+): EngineFinding | undefined => {
+  if (!data) {
+    return undefined;
+  }
+
+  const category = data.category?.toLowerCase() ?? '';
+  const resultText = data.result ?? '';
+
+  let tone: EngineTone = 'info';
+  let label = '注意';
+
+  if (category === 'malicious') {
+    tone = 'danger';
+    label = '危険';
+  } else if (category === 'suspicious') {
+    tone = 'warning';
+    label = '注意が必要';
+  }
+
+  for (const entry of keywordPatterns) {
+    if (entry.pattern.test(resultText)) {
+      tone = entry.tone;
+      label = entry.label;
+      break;
+    }
+  }
+
+  if (tone === 'info') {
+    return undefined;
+  }
+
+  return {
+    engine,
+    category: category || (tone === 'danger' ? 'malicious' : 'suspicious'),
+    categoryLabel: label,
+    tone,
+    threat: resultText || undefined,
+  };
+};
+
+const normalizeEngineFindings = (
+  results?: Record<string, VirusTotalEngineResult>,
+): EngineFinding[] | undefined => {
+  if (!results) {
+    return undefined;
+  }
+
+  const findings = Object.entries(results)
+    .map(([engine, value]) => translateEngineFinding(engine, value))
+    .filter((finding): finding is EngineFinding => Boolean(finding));
+
+  return findings.length > 0 ? findings : undefined;
+};
+
 const normalizeResult = (analysis: VirusTotalAnalysisResponse, submittedUrl: string): UrlAnalysisResult => {
   if (!analysis.data || !analysis.data.id) {
     throw new Error('VirusTotalの解析レスポンスを解釈できませんでした。');
@@ -87,6 +168,7 @@ const normalizeResult = (analysis: VirusTotalAnalysisResponse, submittedUrl: str
 
   const stats = normalizeStats(analysis.data.attributes?.stats);
   const status = mapStatus(analysis.data.attributes?.status);
+  const engineFindings = normalizeEngineFindings(analysis.data.attributes?.results);
 
   return {
     id: analysis.data.id,
@@ -97,6 +179,7 @@ const normalizeResult = (analysis: VirusTotalAnalysisResponse, submittedUrl: str
     stats,
     startedAt: analysis.data.attributes?.date ? analysis.data.attributes?.date * 1000 : undefined,
     detailsUrl: buildDetailsUrl(analysis.data.id),
+    engineFindings,
     raw: analysis,
   };
 };

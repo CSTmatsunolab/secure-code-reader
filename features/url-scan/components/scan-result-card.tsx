@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { ExternalLink } from '@/components/external-link';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { InfoTooltip } from '@/components/ui/info-tooltip';
 import { Palette } from '@/constants/theme';
 import type { UrlAnalysisResult, UrlVerdict } from '@/services/url-analysis';
 
@@ -51,6 +52,7 @@ const StatBadge = memo(function StatBadge({
 });
 
 export const ScanResultCard = memo(function ScanResultCard({ result }: Props) {
+  const findings = result.engineFindings ?? [];
   const summary = useMemo(() => {
     if (result.status !== 'completed') {
       return 'VirusTotalの解析結果を取得中です。数秒後に再度スキャンしてください。';
@@ -75,13 +77,16 @@ export const ScanResultCard = memo(function ScanResultCard({ result }: Props) {
       </ThemedText>
       <ThemedText style={styles.summary}>{summary}</ThemedText>
       <View style={styles.statsRow}>
-        <StatBadge label="Malicious" value={result.stats.malicious} tone="danger" />
-        <StatBadge label="Suspicious" value={result.stats.suspicious} tone="warning" />
-        <StatBadge label="Harmless" value={result.stats.harmless} tone="neutral" />
-      </View>
-      <View style={styles.statsRow}>
-        <StatBadge label="Undetected" value={result.stats.undetected} tone="neutral" />
-        <StatBadge label="Timeout" value={result.stats.timeout} tone="warning" />
+        <StatBadge label="危険" value={result.stats.malicious} tone="danger" />
+        <StatBadge label="注意" value={result.stats.suspicious} tone="warning" />
+        <StatBadge label="安全" value={result.stats.harmless} tone="neutral" />
+        <StatBadge label="未検出" value={result.stats.undetected} tone="neutral" />
+        <StatBadge label="タイムアウト" value={result.stats.timeout} tone="warning" />
+        <InfoTooltip
+          title="判定値について"
+          description="危険/注意/安全/未検出は各ウイルス対策エンジンが下した評価の件数です。タイムアウトは判定が完了しなかった件数を表します。"
+          placement="bottom"
+        />
       </View>
       {result.detailsUrl ? (
         <ExternalLink href={result.detailsUrl}>
@@ -131,6 +136,51 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    color: Palette.textSubtle,
+  },
+  findingsBlock: {
+    gap: 12,
+  },
+  findingsTitle: {
+    fontSize: 16,
+  },
+  findingsList: {
+    gap: 12,
+  },
+  findingItem: {
+    gap: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Palette.cardBorder,
+    padding: 12,
+    backgroundColor: Palette.surfaceMuted,
+  },
+  findingBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  findingBadgeDanger: {
+    backgroundColor: 'rgba(217, 48, 37, 0.16)',
+  },
+  findingBadgeWarning: {
+    backgroundColor: 'rgba(196, 127, 0, 0.16)',
+  },
+  findingBadgeText: {
+    fontSize: 12,
+    color: '#111727',
+  },
+  findingEngine: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  findingThreat: {
+    fontSize: 14,
+    color: Palette.textMuted,
+  },
+  findingsNote: {
+    fontSize: 12,
     color: Palette.textSubtle,
   },
 });

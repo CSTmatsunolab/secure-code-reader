@@ -74,6 +74,7 @@ export function ScanHistoryProvider({ children }: PropsWithChildren) {
                 verdict: analysis.verdict,
                 provider: analysis.provider,
                 detailsUrl: analysis.detailsUrl,
+                engineFindings: analysis.engineFindings,
                 lastAnalyzedAt: Date.now(),
               },
             }
