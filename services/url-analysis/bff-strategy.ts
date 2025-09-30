@@ -1,3 +1,4 @@
+import { getBffApiKey } from '@/services/config/api-key-provider';
 import type {
   AnalysisStatus,
   EngineFinding,
@@ -160,12 +161,17 @@ const normalizeEngineFindings = (
 };
 
 // 内部リスト照会（DynamoDB）
-const checkInternalList = async (url: string, baseUrl: string): Promise<InternalListResult | undefined> => {
+const checkInternalList = async (
+  url: string,
+  baseUrl: string,
+  headers: Record<string, string>,
+): Promise<InternalListResult | undefined> => {
   try {
     const response = await fetch(`${baseUrl}/resolve`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(headers ?? {}),
       },
       body: JSON.stringify({ url }),
     });
@@ -175,7 +181,7 @@ const checkInternalList = async (url: string, baseUrl: string): Promise<Internal
       return undefined;
     }
 
-    const result = await response.json() as InternalListResult;
+    const result = (await response.json()) as InternalListResult;
     return result;
   } catch (error) {
     console.warn('内部リスト照会でエラー:', error);
@@ -208,14 +214,22 @@ const normalizeResult = (analysis: BffAnalysisResponse, submittedUrl: string, in
 };
 
 export async function analyzeViaBff(url: string, baseUrl: string): Promise<UrlAnalysisResult> {
+  const buildBffHeaders = (base?: Record<string, string>) => {
+  const headers: Record<string, string> = { ...(base ?? {}) };
+  const apiKey = getBffApiKey();
+  if (apiKey) {
+    headers['x-api-key'] = apiKey;
+  }
+  return headers;
+  };
   // 1. URLスキャン作成
   const submissionResponse = await fetch(`${baseUrl}/urls`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: `url=${encodeURIComponent(url)}`,
-  });
+  method: 'POST',
+  headers: buildBffHeaders({
+    'Content-Type': 'application/x-www-form-urlencoded',
+  }),
+  body: `url=${encodeURIComponent(url)}`,
+});
 
   if (!submissionResponse.ok) {
     throw new Error(`URLの解析リクエストに失敗しました: ${await extractError(submissionResponse)}`);
@@ -230,9 +244,10 @@ export async function analyzeViaBff(url: string, baseUrl: string): Promise<UrlAn
 
   // 2. 解析結果取得（ポーリング）
   const fetchAnalysis = async (): Promise<BffAnalysisResponse> => {
-    const response = await fetch(`${baseUrl}/analyses/${analysisId}`, {
-      method: 'GET',
-    });
+  const response = await fetch(`${baseUrl}/analyses/${analysisId}`, {
+    method: 'GET',
+    headers: buildBffHeaders(),
+  });
 
     if (!response.ok) {
       throw new Error(`解析結果の取得に失敗しました: ${await extractError(response)}`);
@@ -256,7 +271,7 @@ export async function analyzeViaBff(url: string, baseUrl: string): Promise<UrlAn
   }
 
   // 3. VirusTotal解析完了後に内部リスト照会を実行
-  const internalListResult = await checkInternalList(url, baseUrl);
+  const internalListResult = await checkInternalList(url, baseUrl, buildBffHeaders());
   
   // 最終結果に内部リストの結果を含めて再構築
   return normalizeResult(analysisJson, url, internalListResult);

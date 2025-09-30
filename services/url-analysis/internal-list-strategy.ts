@@ -1,5 +1,17 @@
-import { getBffBaseUrl } from '@/services/config/api-key-provider';
+import { getBffApiKey, getBffBaseUrl } from '@/services/config/api-key-provider';
 import type { InternalListResult } from './types';
+
+const buildHeaders = (): Record<string, string> => {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  const apiKey = getBffApiKey();
+  if (apiKey) {
+    headers['x-api-key'] = apiKey;
+  }
+  return headers;
+};
+
 
 // 内部リスト照会のみを実行（VirusTotal解析なし）
 export const checkInternalListOnly = async (url: string): Promise<InternalListResult | undefined> => {
@@ -12,9 +24,7 @@ export const checkInternalListOnly = async (url: string): Promise<InternalListRe
   try {
     const response = await fetch(`${bffBaseUrl}/resolve`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: buildHeaders(),
       body: JSON.stringify({ url }),
     });
 

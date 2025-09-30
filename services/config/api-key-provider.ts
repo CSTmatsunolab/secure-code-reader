@@ -6,6 +6,7 @@ type VirusTotalConfig = {
 
 type BffConfig = {
   baseUrl?: string;
+  apiKey?: string;
 };
 
 type LocalApiConfig = {
@@ -15,7 +16,7 @@ type LocalApiConfig = {
 
 const localConfig: LocalApiConfig = config;
 
-const sanitizeKey = (value?: string) => {
+const sanitizeKey = (value?: string | null) => {
   if (!value) {
     return undefined;
   }
@@ -36,9 +37,18 @@ export const isVirusTotalConfigured = (): boolean => {
 };
 
 export const getBffBaseUrl = (): string | undefined => {
-  const trimmed = localConfig.bff?.baseUrl?.trim();
-  if (!trimmed) {
-    return undefined;
+  const envBaseUrl = sanitizeKey(process.env.EXPO_PUBLIC_BFF_BASE_URL ?? null);
+  if (envBaseUrl) {
+    return envBaseUrl;
   }
-  return trimmed;
+
+  return sanitizeKey(localConfig.bff?.baseUrl);
+};
+
+export const getBffApiKey = (): string | undefined => {
+  const envApiKey = sanitizeKey(process.env.EXPO_PUBLIC_BFF_API_KEY ?? null);
+  if (envApiKey) {
+    return envApiKey;
+  }
+  return sanitizeKey(localConfig.bff?.apiKey);
 };
