@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Linking,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RiskConfirmDialog } from '@/components/dialogs/risk-confirm-dialog';
@@ -18,6 +27,13 @@ import type { UrlAnalysisResult } from '@/services/url-analysis';
 import { checkInternalListOnly } from '@/services/url-analysis';
 
 export default function ScanScreen() {
+  const { width, fontScale } = useWindowDimensions();
+  const heroTitleFontSize = useMemo(() => {
+    const scaledWidth = width / fontScale;
+    const baseSize = scaledWidth * 0.06;
+    return Math.max(24, Math.min(baseSize, 34));
+  }, [width, fontScale]);
+
   const {
     permission,
     isCameraActive,
@@ -236,7 +252,12 @@ export default function ScanScreen() {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled">
         <ThemedView style={styles.heroCard}>
-          <ThemedText type="title" style={styles.heroTitle}>
+          <ThemedText
+            type="title"
+            style={[
+              styles.heroTitle,
+              { fontSize: heroTitleFontSize, lineHeight: heroTitleFontSize * 1.1 },
+            ]}>
             QR セキュリティスキャン
           </ThemedText>
         </ThemedView>
@@ -381,8 +402,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   heroTitle: {
-    fontSize: 32,
     letterSpacing: -0.5,
+    textAlign: 'center',
   },
   heroSubtitle: {
     fontSize: 16,
