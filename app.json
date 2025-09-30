@@ -9,7 +9,10 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "スクリーンショットや保存済みの画像からQRコードを読み取るためにフォトライブラリへのアクセスが必要です。"
+      }
     },
     "android": {
       "adaptiveIcon": {

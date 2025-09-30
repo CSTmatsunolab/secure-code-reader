@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+ｌimport { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RiskConfirmDialog } from '@/components/dialogs/risk-confirm-dialog';
@@ -27,6 +27,8 @@ export default function ScanScreen() {
     requestPermission,
     reset,
     result,
+    scanImageFromLibrary,
+    isProcessingImage,
     error,
   } = useQrScanner();
 
@@ -89,6 +91,12 @@ export default function ScanScreen() {
     if (!result) {
       lastLoggedId.current = null;
       setIsDetailsVisible(false);
+    }
+  }, [result]);
+
+  useEffect(() => {
+    if (result?.origin === 'library') {
+      setIsDetailsVisible(true);
     }
   }, [result]);
 
@@ -242,6 +250,28 @@ export default function ScanScreen() {
             onCodeScanned={handleCodeScanned}
           />
         </View>
+        <View style={styles.secondaryActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ busy: isProcessingImage }}
+            style={({ pressed }) => [
+              styles.libraryButton,
+              pressed ? styles.libraryButtonPressed : null,
+              isProcessingImage ? styles.libraryButtonDisabled : null,
+            ]}
+            onPress={scanImageFromLibrary}
+            disabled={isProcessingImage}>
+            <View style={styles.libraryButtonContent}>
+              {isProcessingImage ? <ActivityIndicator color="#ffffff" /> : null}
+              <ThemedText type="defaultSemiBold" style={styles.libraryButtonLabel}>
+                {isProcessingImage ? '解析中…' : '画像から読み取る'}
+              </ThemedText>
+            </View>
+          </Pressable>
+          <ThemedText style={styles.libraryHint}>
+            スクリーンショットや保存済みの写真から QR コードを解析できます。
+          </ThemedText>
+        </View>
         {error ? (
           <ThemedText type="defaultSemiBold" style={styles.errorText}>
             {error}
@@ -392,6 +422,40 @@ const styles = StyleSheet.create({
   cameraContainer: {
     alignSelf: 'stretch',
     alignItems: 'center',
+  },
+  secondaryActions: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  libraryButton: {
+    backgroundColor: Palette.primary,
+    borderRadius: 999,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    alignSelf: 'stretch',
+    maxWidth: 360,
+  },
+  libraryButtonPressed: {
+    opacity: 0.92,
+  },
+  libraryButtonDisabled: {
+    opacity: 0.7,
+  },
+  libraryButtonContent: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  libraryButtonLabel: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  libraryHint: {
+    fontSize: 13,
+    color: Palette.textMuted,
+    textAlign: 'center',
   },
   emptyStateCard: {
     gap: 8,

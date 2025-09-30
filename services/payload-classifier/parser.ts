@@ -1,6 +1,6 @@
 import {
-  ClassifiedPayload,
   ClassificationSummary,
+  ClassifiedPayload,
   PhoneClassification,
   QrPayloadClassification,
   QrPayloadKind,
