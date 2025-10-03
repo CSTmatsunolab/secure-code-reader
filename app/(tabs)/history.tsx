@@ -35,7 +35,7 @@ function formatTimestamp(timestamp: number) {
 }
 
 function useHistoryHeading(count: number) {
-  return useMemo(() => (count > 0 ? `スキャン履歴（${count}件）` : 'スキャン履歴'), [count]);
+  return useMemo(() => (count > 0 ? `スキャン履歴` : 'スキャン履歴'), [count]);
 }
 
 const kindLabel: Record<ClassifiedPayload['classification']['kind'], string> = {
