@@ -13,6 +13,8 @@ export interface ScanHistoryEntry {
     provider: UrlAnalysisResult['provider'];
     detailsUrl?: string;
     lastAnalyzedAt: number;
+    stats?: UrlAnalysisResult['stats'];
+    engineFindings?: UrlAnalysisResult['engineFindings'];
   };
 }
 
@@ -74,6 +76,7 @@ export function ScanHistoryProvider({ children }: PropsWithChildren) {
                 verdict: analysis.verdict,
                 provider: analysis.provider,
                 detailsUrl: analysis.detailsUrl,
+                stats: analysis.stats,
                 engineFindings: analysis.engineFindings,
                 lastAnalyzedAt: Date.now(),
               },

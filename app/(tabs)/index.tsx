@@ -20,7 +20,7 @@ import { QrCameraView } from '@/features/qr-capture/components/qr-camera-view';
 import { useQrScanner } from '@/features/qr-capture/hooks/use-qr-scanner';
 import { useScanHistory } from '@/features/scan-history/hooks/use-scan-history';
 import { useSettings } from '@/features/settings/hooks/use-settings';
-import { UrlScanForm } from '@/features/url-scan/components/url-scan-form';
+import { isVirusTotalConfigured } from '@/services/config/api-key-provider';
 import { classifyQrPayload } from '@/services/payload-classifier/parser';
 import type { ClassifiedPayload } from '@/services/payload-classifier/types';
 import type { UrlAnalysisResult } from '@/services/url-analysis';
@@ -107,6 +107,7 @@ export default function ScanScreen() {
     if (!result) {
       lastLoggedId.current = null;
       setIsDetailsVisible(false);
+      setLatestAnalysisResult(null);
     }
   }, [result]);
 
@@ -153,18 +154,14 @@ export default function ScanScreen() {
           if (!classification.normalizedUrl) {
             return;
           }
-          
+
           try {
             // 内部リスト照会開始
             setIsCheckingInternalList(true);
             const internalListResult = await checkInternalListOnly(classification.normalizedUrl);
-            
+
             const verdict = currentEntry?.analysis?.verdict;
-            const requiresPrompt =
-              alwaysShowStrongWarning || 
-              verdict === 'danger' || 
-              verdict === 'warning' ||
-              internalListResult?.listed; // 内部リストにある場合も確認を促す
+            const hasAnalysis = !!verdict;
 
             const proceed = () => {
               Linking.openURL(classification.normalizedUrl).catch((err) => {
@@ -174,6 +171,36 @@ export default function ScanScreen() {
                 );
               });
             };
+
+            // VirusTotal設定がオフの場合の確認
+            if (!useVirusTotal) {
+              setRiskDialog({
+                visible: true,
+                tone: 'info',
+                title: 'VirusTotal判定を推奨',
+                message: 'より安全にリンクを開くには、設定タブで「VirusTotalを利用して詳細判定」をオンにして、安全性の判定を行うことを推奨します。\n\nそれでもリンクを開きますか？',
+                onConfirm: proceed,
+              });
+              return;
+            }
+
+            // 判定が行われていない場合の確認
+            if (!hasAnalysis) {
+              setRiskDialog({
+                visible: true,
+                tone: 'warning',
+                title: '安全性の判定を推奨',
+                message: 'まだ安全性の判定が行われていません。先に「安全性を判定する」ボタンを押して判定を行うことを推奨します。\n\nそれでもリンクを開きますか？',
+                onConfirm: proceed,
+              });
+              return;
+            }
+
+            const requiresPrompt =
+              alwaysShowStrongWarning ||
+              verdict === 'danger' ||
+              verdict === 'warning' ||
+              internalListResult?.listed; // 内部リストにある場合も確認を促す
 
             if (requiresPrompt) {
               let message =
@@ -228,7 +255,7 @@ export default function ScanScreen() {
         err instanceof Error ? err.message : '不明なエラーが発生しました。',
       );
     }
-  }, [classifiedPayload, alwaysShowStrongWarning, currentEntry]);
+  }, [classifiedPayload, alwaysShowStrongWarning, currentEntry, useVirusTotal]);
 
   const handleAnalysisResult = useCallback(
     (analysis: UrlAnalysisResult) => {
@@ -240,10 +267,36 @@ export default function ScanScreen() {
     [currentEntryId, updateEntryAnalysis],
   );
 
-  const manualFormTitle =
-    classifiedPayload?.classification.kind === 'url'
-      ? 'URLの安全性チェック (読み取り結果)'
-      : 'URLを手入力して判定';
+  const [isAnalyzingUrl, setIsAnalyzingUrl] = useState(false);
+  const [latestAnalysisResult, setLatestAnalysisResult] = useState<UrlAnalysisResult | null>(null);
+
+  const handleAnalyzeUrl = useCallback(async () => {
+    if (!classifiedPayload || classifiedPayload.classification.kind !== 'url') {
+      return;
+    }
+    if (!useVirusTotal) {
+      Alert.alert('VirusTotal が無効です', '設定タブで有効にしてから判定してください。');
+      return;
+    }
+    if (!isVirusTotalConfigured()) {
+      Alert.alert('APIキー未設定', 'config/local-api-keys.json に VirusTotal API キーを設定してください。');
+      return;
+    }
+    setIsAnalyzingUrl(true);
+    try {
+      const { analyzeUrl } = await import('@/services/url-analysis');
+      const analysis = await analyzeUrl(classifiedPayload.classification.normalizedUrl);
+      setLatestAnalysisResult(analysis);
+      handleAnalysisResult(analysis);
+    } catch (err) {
+      Alert.alert(
+        '解析に失敗しました',
+        err instanceof Error ? err.message : '不明なエラーが発生しました。',
+      );
+    } finally {
+      setIsAnalyzingUrl(false);
+    }
+  }, [classifiedPayload, useVirusTotal, handleAnalysisResult]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -289,9 +342,17 @@ export default function ScanScreen() {
               </ThemedText>
             </View>
           </Pressable>
-          <ThemedText style={styles.libraryHint}>
-            スクリーンショットや保存済みの写真から QR コードを解析できます。
-          </ThemedText>
+          {result ? (
+            <Pressable
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                styles.rescanButton,
+                pressed ? styles.rescanButtonPressed : null,
+              ]}
+              onPress={handleRescan}>
+              <ThemedText style={styles.rescanButtonLabel}>別のコードを読む</ThemedText>
+            </Pressable>
+          ) : null}
         </View>
         {error ? (
           <ThemedText type="defaultSemiBold" style={styles.errorText}>
@@ -314,15 +375,6 @@ export default function ScanScreen() {
                   スキャンする
                 </ThemedText>
               </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                style={({ pressed }) => [
-                  styles.secondaryButton,
-                  pressed ? styles.secondaryButtonPressed : null,
-                ]}
-                onPress={handleRescan}>
-                <ThemedText style={styles.secondaryLabel}>別のコードを読む</ThemedText>
-              </Pressable>
             </View>
           </ThemedView>
         ) : null}
@@ -343,20 +395,15 @@ export default function ScanScreen() {
             onPrimaryAction={primaryActionLabel ? handlePrimaryAction : undefined}
             primaryActionLabel={primaryActionLabel}
             isLoadingPrimaryAction={isCheckingInternalList}
+            onAnalyzeUrl={classifiedPayload.classification.kind === 'url' && useVirusTotal ? handleAnalyzeUrl : undefined}
+            isAnalyzing={isAnalyzingUrl}
+            analysisResult={latestAnalysisResult}
           />
         ) : null}
-        {isDetailsVisible && classifiedPayload?.classification.kind === 'url' ? (
-          useVirusTotal ? (
-            <UrlScanForm
-              initialUrl={classifiedPayload.classification.normalizedUrl}
-              title={manualFormTitle}
-              onResult={handleAnalysisResult}
-            />
-          ) : (
-            <ThemedText style={styles.virusTotalOffNotice}>
-              設定で「VirusTotalを利用して詳細判定」を有効にすると、安全性の詳細チェックが利用できます。
-            </ThemedText>
-          )
+        {isDetailsVisible && classifiedPayload?.classification.kind === 'url' && !useVirusTotal ? (
+          <ThemedText style={styles.virusTotalOffNotice}>
+            設定で「VirusTotalを利用して詳細判定」を有効にすると、安全性の詳細チェックが利用できます。
+          </ThemedText>
         ) : null}
       </ScrollView>
       <RiskConfirmDialog
@@ -477,6 +524,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Palette.textMuted,
     textAlign: 'center',
+  },
+  rescanButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Palette.cardBorder,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    alignSelf: 'stretch',
+    maxWidth: 360,
+    alignItems: 'center',
+    backgroundColor: Palette.surface,
+  },
+  rescanButtonPressed: {
+    opacity: 0.85,
+  },
+  rescanButtonLabel: {
+    fontSize: 14,
+    color: Palette.textMuted,
   },
   emptyStateCard: {
     gap: 8,

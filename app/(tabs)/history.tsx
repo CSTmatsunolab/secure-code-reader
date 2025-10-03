@@ -11,13 +11,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { RiskConfirmDialog } from '@/components/dialogs/risk-confirm-dialog';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { InfoTooltip } from '@/components/ui/info-tooltip';
-import { RiskConfirmDialog } from '@/components/dialogs/risk-confirm-dialog';
 import { Palette } from '@/constants/theme';
-import { useScanHistory } from '@/features/scan-history/hooks/use-scan-history';
 import type { ScanHistoryEntry } from '@/features/scan-history/history-context';
+import { useScanHistory } from '@/features/scan-history/hooks/use-scan-history';
 import { useSettings } from '@/features/settings/hooks/use-settings';
 import { isVirusTotalConfigured } from '@/services/config/api-key-provider';
 import type { ClassifiedPayload } from '@/services/payload-classifier/types';
@@ -82,6 +82,7 @@ export default function HistoryScreen() {
   const [query, setQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+  const [expandedAnalysisId, setExpandedAnalysisId] = useState<string | null>(null);
   const [riskDialog, setRiskDialog] = useState({
     visible: false,
     tone: 'info' as 'danger' | 'warning' | 'info',
@@ -133,14 +134,40 @@ export default function HistoryScreen() {
       }
 
       const verdict = entry.analysis?.verdict;
-      const requiresPrompt =
-        alwaysShowStrongWarning || verdict === 'danger' || verdict === 'warning';
+      const hasAnalysis = !!verdict;
 
       const proceed = () => {
         Linking.openURL(classification.normalizedUrl).catch((err) =>
           console.warn('Failed to open URL from history', err),
         );
       };
+
+      // VirusTotal設定がオフの場合の確認
+      if (!useVirusTotal) {
+        setRiskDialog({
+          visible: true,
+          tone: 'info',
+          title: 'VirusTotal判定を推奨',
+          message: 'より安全にリンクを開くには、設定タブで「VirusTotalを利用して詳細判定」をオンにして、安全性の判定を行うことを推奨します。\n\nそれでもリンクを開きますか？',
+          onConfirm: proceed,
+        });
+        return;
+      }
+
+      // 判定が行われていない場合の確認
+      if (!hasAnalysis) {
+        setRiskDialog({
+          visible: true,
+          tone: 'warning',
+          title: '安全性の判定を推奨',
+          message: 'まだ安全性の判定が行われていません。先に「安全性を判定する」ボタンを押して判定を行うことを推奨します。\n\nそれでもリンクを開きますか？',
+          onConfirm: proceed,
+        });
+        return;
+      }
+
+      const requiresPrompt =
+        alwaysShowStrongWarning || verdict === 'danger' || verdict === 'warning';
 
       if (requiresPrompt) {
         let message =
@@ -166,7 +193,7 @@ export default function HistoryScreen() {
 
       proceed();
     },
-    [alwaysShowStrongWarning],
+    [alwaysShowStrongWarning, useVirusTotal],
   );
 
   const handleCallPhone = useCallback((phoneNumber: string) => {
@@ -201,7 +228,7 @@ export default function HistoryScreen() {
       try {
         const analysis = await analyzeUrl(classification.normalizedUrl);
         updateEntryAnalysis({ entryId: entry.id, analysis });
-        Alert.alert('解析完了', 'VirusTotal の判定結果を更新しました。');
+        setExpandedAnalysisId(entry.id);
       } catch (err) {
         Alert.alert(
           '解析に失敗しました',
@@ -321,29 +348,6 @@ export default function HistoryScreen() {
                     </View>
                     <ThemedText style={styles.cardRawValue}>{classification.rawValue}</ThemedText>
                   </View>
-                  {primaryFinding ? (
-                    <View style={styles.cardFinding}>
-                      <View
-                        style={[
-                          styles.cardFindingBadge,
-                          primaryFinding.tone === 'danger'
-                            ? styles.cardFindingBadgeDanger
-                            : styles.cardFindingBadgeWarning,
-                        ]}>
-                        <ThemedText type="defaultSemiBold" style={styles.cardFindingBadgeText}>
-                          {primaryFinding.categoryLabel}
-                        </ThemedText>
-                      </View>
-                      <ThemedText style={styles.cardFindingEngine}>
-                        {primaryFinding.engine}
-                      </ThemedText>
-                      {primaryFinding.threat ? (
-                        <ThemedText style={styles.cardFindingThreat}>
-                          {primaryFinding.threat}
-                        </ThemedText>
-                      ) : null}
-                    </View>
-                  ) : null}
                   {showActions ? (
                     <View style={styles.cardActions}>
                       {isUrl ? (
@@ -362,16 +366,6 @@ export default function HistoryScreen() {
                               安全性を判定する
                             </ThemedText>
                           )}
-                        </Pressable>
-                      ) : null}
-                      {isUrl ? (
-                        <Pressable
-                          style={({ pressed }) => [
-                            styles.actionButton,
-                            pressed ? styles.actionButtonPressed : null,
-                          ]}
-                          onPress={() => handleOpenUrl(entry)}>
-                          <ThemedText style={styles.actionLabel}>リンクを開く</ThemedText>
                         </Pressable>
                       ) : null}
                       {isPhone ? (
@@ -394,6 +388,89 @@ export default function HistoryScreen() {
                           <ThemedText style={styles.actionLabel}>Wi-Fi設定を開く</ThemedText>
                         </Pressable>
                       ) : null}
+                    </View>
+                  ) : null}
+                  {expandedAnalysisId === entry.id && entry.analysis ? (
+                    <View style={styles.analysisResults}>
+                      <View style={styles.analysisHeader}>
+                        <ThemedText type="subtitle" style={styles.analysisTitle}>
+                          解析結果
+                        </ThemedText>
+                        <Pressable onPress={() => setExpandedAnalysisId(null)}>
+                          <ThemedText style={styles.collapseButton}>閉じる</ThemedText>
+                        </Pressable>
+                      </View>
+                      <View
+                        style={[
+                          styles.verdictCard,
+                          verdict === 'danger' && styles.verdictCardDanger,
+                          verdict === 'warning' && styles.verdictCardWarning,
+                          verdict === 'safe' && styles.verdictCardSafe,
+                        ]}>
+                        <ThemedText
+                          type="defaultSemiBold"
+                          style={[
+                            styles.verdictText,
+                            { color: badgePalette.textColor }
+                          ]}>
+                          {verdictLabelDisplay}
+                        </ThemedText>
+                      </View>
+                      {entry.analysis.stats ? (
+                        <View style={styles.statsRow}>
+                          <View style={styles.statItem}>
+                            <ThemedText style={styles.statValue}>{entry.analysis.stats.malicious}</ThemedText>
+                            <ThemedText style={styles.statLabel}>危険</ThemedText>
+                          </View>
+                          <View style={styles.statItem}>
+                            <ThemedText style={styles.statValue}>{entry.analysis.stats.suspicious}</ThemedText>
+                            <ThemedText style={styles.statLabel}>注意</ThemedText>
+                          </View>
+                          <View style={styles.statItem}>
+                            <ThemedText style={styles.statValue}>{entry.analysis.stats.harmless}</ThemedText>
+                            <ThemedText style={styles.statLabel}>安全</ThemedText>
+                          </View>
+                          <View style={styles.statItem}>
+                            <ThemedText style={styles.statValue}>{entry.analysis.stats.undetected}</ThemedText>
+                            <ThemedText style={styles.statLabel}>未検出</ThemedText>
+                          </View>
+                        </View>
+                      ) : null}
+                      {primaryFinding ? (
+                        <View style={styles.cardFinding}>
+                          <View
+                            style={[
+                              styles.cardFindingBadge,
+                              primaryFinding.tone === 'danger'
+                                ? styles.cardFindingBadgeDanger
+                                : styles.cardFindingBadgeWarning,
+                            ]}>
+                            <ThemedText type="defaultSemiBold" style={styles.cardFindingBadgeText}>
+                              {primaryFinding.categoryLabel}
+                            </ThemedText>
+                          </View>
+                          <ThemedText style={styles.cardFindingEngine}>
+                            {primaryFinding.engine}
+                          </ThemedText>
+                          {primaryFinding.threat ? (
+                            <ThemedText style={styles.cardFindingThreat}>
+                              {primaryFinding.threat}
+                            </ThemedText>
+                          ) : null}
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : null}
+                  {isUrl && expandedAnalysisId === entry.id ? (
+                    <View style={styles.cardActions}>
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.actionButton,
+                          pressed ? styles.actionButtonPressed : null,
+                        ]}
+                        onPress={() => handleOpenUrl(entry)}>
+                        <ThemedText style={styles.actionLabel}>リンクを開く</ThemedText>
+                      </Pressable>
                     </View>
                   ) : null}
                 </ThemedView>
@@ -632,5 +709,68 @@ const styles = StyleSheet.create({
   actionLabel: {
     fontSize: 14,
     color: Palette.primary,
+  },
+  analysisResults: {
+    gap: 16,
+    marginTop: 8,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Palette.cardBorder,
+    backgroundColor: Palette.surfaceMuted,
+  },
+  analysisHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  analysisTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  collapseButton: {
+    fontSize: 14,
+    color: Palette.primary,
+  },
+  verdictCard: {
+    padding: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  verdictCardDanger: {
+    backgroundColor: 'rgba(217, 48, 37, 0.12)',
+    borderColor: 'rgba(217, 48, 37, 0.32)',
+  },
+  verdictCardWarning: {
+    backgroundColor: 'rgba(249, 171, 0, 0.12)',
+    borderColor: 'rgba(249, 171, 0, 0.28)',
+  },
+  verdictCardSafe: {
+    backgroundColor: 'rgba(21, 128, 61, 0.12)',
+    borderColor: 'rgba(21, 128, 61, 0.28)',
+  },
+  verdictText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  statItem: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#11181C',
+  },
+  statLabel: {
+    fontSize: 12,
+    color: Palette.textMuted,
   },
 });
