@@ -46,7 +46,7 @@ Secure Code Reader は、QR コードに埋め込まれたリンクや設定情�
 - `npm run lint`
 
 ## 使い方
-詳しい使い方は[howto.md](howto.md)を参照してください。
+詳しい使い方は[howto.md](document/howto.md)を参照してください。
 
 ## フォルダ構成 (抜粋)
 ```
