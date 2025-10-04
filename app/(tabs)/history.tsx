@@ -45,6 +45,42 @@ const kindLabel: Record<ClassifiedPayload['classification']['kind'], string> = {
   text: 'テキスト',
 };
 
+const verdictLabel: Record<string, string> = {
+  danger: '⛔ 危険',
+  warning: '⚠️ 注意',
+  safe: '✓ 安全',
+  unknown: '❓ 不明',
+  unanalyzed: '未判定',
+};
+
+const verdictBadgeColors: Record<string, { backgroundColor: string; borderColor: string; textColor: string }> = {
+  danger: {
+    backgroundColor: 'rgba(217, 48, 37, 0.12)',
+    borderColor: 'rgba(217, 48, 37, 0.32)',
+    textColor: Palette.danger,
+  },
+  warning: {
+    backgroundColor: 'rgba(249, 171, 0, 0.12)',
+    borderColor: 'rgba(249, 171, 0, 0.28)',
+    textColor: Palette.warning,
+  },
+  safe: {
+    backgroundColor: 'rgba(21, 128, 61, 0.12)',
+    borderColor: 'rgba(21, 128, 61, 0.28)',
+    textColor: Palette.success,
+  },
+  unknown: {
+    backgroundColor: 'rgba(91, 103, 131, 0.12)',
+    borderColor: 'rgba(91, 103, 131, 0.24)',
+    textColor: Palette.textMuted,
+  },
+  unanalyzed: {
+    backgroundColor: 'rgba(148, 163, 184, 0.12)',
+    borderColor: 'rgba(148, 163, 184, 0.24)',
+    textColor: Palette.textSubtle,
+  },
+};
+
 
 export default function HistoryScreen() {
   const { entries, clearHistory, updateEntryAnalysis } = useScanHistory();
@@ -283,8 +319,14 @@ export default function HistoryScreen() {
               const isPhone = kind === 'phone';
               const isWifi = kind === 'wifi';
               const showActions = isUrl || isPhone || isWifi;
-              const isDanger = entry.analysis?.verdict === 'danger';
+              const verdict = entry.analysis?.verdict;
+              const isDanger = verdict === 'danger';
               const isSubmittingAnalysis = analyzingId === entry.id;
+
+              // 判定状態のバッジ表示用
+              const verdictKey = isUrl ? (verdict || 'unanalyzed') : null;
+              const verdictLabelText = verdictKey ? verdictLabel[verdictKey] : null;
+              const badgePalette = verdictKey ? verdictBadgeColors[verdictKey] : null;
 
               return (
                 <ThemedView
@@ -296,6 +338,22 @@ export default function HistoryScreen() {
                     </ThemedText>
                     <ThemedText style={styles.cardTimestamp}>{formatTimestamp(scannedAt)}</ThemedText>
                   </View>
+                  {verdictLabelText && badgePalette ? (
+                    <View
+                      style={[
+                        styles.verdictBadge,
+                        {
+                          backgroundColor: badgePalette.backgroundColor,
+                          borderColor: badgePalette.borderColor,
+                        },
+                      ]}>
+                      <ThemedText
+                        type="defaultSemiBold"
+                        style={[styles.verdictBadgeText, { color: badgePalette.textColor }]}>
+                        {verdictLabelText}
+                      </ThemedText>
+                    </View>
+                  ) : null}
                   <ThemedText type="title" style={styles.cardTitle}>
                     {summary.title}
                   </ThemedText>
@@ -333,7 +391,7 @@ export default function HistoryScreen() {
                               </ThemedText>
                             )}
                           </Pressable>
-                          {!entry.analysis && (
+                          {!expandedAnalysisId || expandedAnalysisId !== entry.id ? (
                             <Pressable
                               style={({ pressed }) => [
                                 styles.actionButton,
@@ -342,7 +400,7 @@ export default function HistoryScreen() {
                               onPress={() => handleOpenUrl(entry)}>
                               <ThemedText style={styles.actionLabel}>リンクを開く</ThemedText>
                             </Pressable>
-                          )}
+                          ) : null}
                         </>
                       ) : null}
                       {isPhone ? (
@@ -534,6 +592,16 @@ const styles = StyleSheet.create({
   cardTimestamp: {
     fontSize: 13,
     color: Palette.textMuted,
+  },
+  verdictBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  verdictBadgeText: {
+    fontSize: 12,
   },
   cardTitle: {
     fontSize: 20,
