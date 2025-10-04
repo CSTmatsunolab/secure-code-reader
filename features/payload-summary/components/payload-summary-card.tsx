@@ -1,12 +1,12 @@
-import { memo } from 'react';
+import { memo, ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { InfoTooltip } from '@/components/ui/info-tooltip';
 import { Palette } from '@/constants/theme';
 
 import { ClassifiedPayload } from '@/services/payload-classifier/types';
-import type { UrlAnalysisResult, UrlVerdict } from '@/services/url-analysis';
 
 interface Props {
   payload: ClassifiedPayload;
@@ -16,7 +16,7 @@ interface Props {
   isLoadingPrimaryAction?: boolean;
   onAnalyzeUrl?: () => void;
   isAnalyzing?: boolean;
-  analysisResult?: UrlAnalysisResult | null;
+  analysisResultCard?: ReactNode;
 }
 
 const kindLabel: Record<ClassifiedPayload['classification']['kind'], string> = {
@@ -24,36 +24,6 @@ const kindLabel: Record<ClassifiedPayload['classification']['kind'], string> = {
   phone: '電話番号',
   url: 'URL',
   text: 'テキスト',
-};
-
-const verdictLabel: Record<UrlVerdict, string> = {
-  danger: '危険',
-  warning: '注意',
-  safe: '安全',
-  unknown: '判定保留',
-};
-
-const verdictBadgeColors: Record<UrlVerdict, { backgroundColor: string; borderColor: string; textColor: string }> = {
-  danger: {
-    backgroundColor: 'rgba(217, 48, 37, 0.12)',
-    borderColor: 'rgba(217, 48, 37, 0.32)',
-    textColor: Palette.danger,
-  },
-  warning: {
-    backgroundColor: 'rgba(249, 171, 0, 0.12)',
-    borderColor: 'rgba(249, 171, 0, 0.28)',
-    textColor: Palette.warning,
-  },
-  safe: {
-    backgroundColor: 'rgba(21, 128, 61, 0.12)',
-    borderColor: 'rgba(21, 128, 61, 0.28)',
-    textColor: Palette.success,
-  },
-  unknown: {
-    backgroundColor: 'rgba(91, 103, 131, 0.12)',
-    borderColor: 'rgba(91, 103, 131, 0.24)',
-    textColor: Palette.textMuted,
-  },
 };
 
 export const PayloadSummaryCard = memo(function PayloadSummaryCard({
@@ -64,16 +34,12 @@ export const PayloadSummaryCard = memo(function PayloadSummaryCard({
   isLoadingPrimaryAction = false,
   onAnalyzeUrl,
   isAnalyzing = false,
-  analysisResult,
+  analysisResultCard,
 }: Props) {
   const { classification, summary } = payload;
 
   const highlights = summary.highlights ?? [];
   const isUrl = classification.kind === 'url';
-  const verdict = analysisResult?.verdict;
-  const badgePalette = verdict ? verdictBadgeColors[verdict] : null;
-  const verdictLabelDisplay = verdict ? verdictLabel[verdict] : null;
-  const primaryFinding = analysisResult?.engineFindings?.[0];
 
   return (
     <ThemedView style={styles.card}>
@@ -99,9 +65,16 @@ export const PayloadSummaryCard = memo(function PayloadSummaryCard({
         </View>
       ) : null}
       <View style={styles.rawContainer}>
-        <ThemedText type="defaultSemiBold" style={styles.rawLabel}>
-          生データ
-        </ThemedText>
+        <View style={styles.rawHeader}>
+          <ThemedText type="defaultSemiBold" style={styles.rawLabel}>
+            生データ
+          </ThemedText>
+          <InfoTooltip
+            title="生データとは"
+            description="QR コード内の文字列をそのまま表示しています。コピーしたい場合や、リンク先を開く前に確認したい場合に参照してください。"
+            placement="top"
+          />
+        </View>
         <ThemedText style={styles.rawValue}>{classification.rawValue}</ThemedText>
       </View>
       <View style={styles.actions}>
@@ -124,7 +97,7 @@ export const PayloadSummaryCard = memo(function PayloadSummaryCard({
             )}
           </Pressable>
         ) : null}
-        {!analysisResult && primaryActionLabel && onPrimaryAction ? (
+        {!analysisResultCard && primaryActionLabel && onPrimaryAction ? (
           <Pressable
             accessibilityRole="button"
             disabled={isLoadingPrimaryAction}
@@ -143,73 +116,8 @@ export const PayloadSummaryCard = memo(function PayloadSummaryCard({
           </Pressable>
         ) : null}
       </View>
-      {analysisResult ? (
-        <View style={styles.analysisResults}>
-          <ThemedText type="subtitle" style={styles.analysisTitle}>
-            解析結果
-          </ThemedText>
-          {badgePalette && verdictLabelDisplay ? (
-            <View
-              style={[
-                styles.verdictCard,
-                {
-                  backgroundColor: badgePalette.backgroundColor,
-                  borderColor: badgePalette.borderColor,
-                },
-              ]}>
-              <ThemedText
-                type="defaultSemiBold"
-                style={[styles.verdictText, { color: badgePalette.textColor }]}>
-                {verdictLabelDisplay}
-              </ThemedText>
-            </View>
-          ) : null}
-          {analysisResult.stats ? (
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <ThemedText style={styles.statValue}>{analysisResult.stats.malicious}</ThemedText>
-                <ThemedText style={styles.statLabel}>危険</ThemedText>
-              </View>
-              <View style={styles.statItem}>
-                <ThemedText style={styles.statValue}>{analysisResult.stats.suspicious}</ThemedText>
-                <ThemedText style={styles.statLabel}>注意</ThemedText>
-              </View>
-              <View style={styles.statItem}>
-                <ThemedText style={styles.statValue}>{analysisResult.stats.harmless}</ThemedText>
-                <ThemedText style={styles.statLabel}>安全</ThemedText>
-              </View>
-              <View style={styles.statItem}>
-                <ThemedText style={styles.statValue}>{analysisResult.stats.undetected}</ThemedText>
-                <ThemedText style={styles.statLabel}>未検出</ThemedText>
-              </View>
-            </View>
-          ) : null}
-          {primaryFinding ? (
-            <View style={styles.cardFinding}>
-              <View
-                style={[
-                  styles.cardFindingBadge,
-                  primaryFinding.tone === 'danger'
-                    ? styles.cardFindingBadgeDanger
-                    : styles.cardFindingBadgeWarning,
-                ]}>
-                <ThemedText type="defaultSemiBold" style={styles.cardFindingBadgeText}>
-                  {primaryFinding.categoryLabel}
-                </ThemedText>
-              </View>
-              <ThemedText style={styles.cardFindingEngine}>
-                {primaryFinding.engine}
-              </ThemedText>
-              {primaryFinding.threat ? (
-                <ThemedText style={styles.cardFindingThreat}>
-                  {primaryFinding.threat}
-                </ThemedText>
-              ) : null}
-            </View>
-          ) : null}
-        </View>
-      ) : null}
-      {analysisResult && primaryActionLabel && onPrimaryAction ? (
+      {analysisResultCard}
+      {analysisResultCard && primaryActionLabel && onPrimaryAction ? (
         <View style={styles.actions}>
           <Pressable
             accessibilityRole="button"
@@ -283,6 +191,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Palette.cardBorder,
   },
+  rawHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   rawLabel: {
     fontSize: 12,
     color: Palette.textSubtle,
@@ -326,79 +239,5 @@ const styles = StyleSheet.create({
   ghostLabel: {
     fontSize: 14,
     color: Palette.primary,
-  },
-  analysisResults: {
-    gap: 16,
-    marginTop: 4,
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Palette.cardBorder,
-    backgroundColor: Palette.surfaceMuted,
-  },
-  analysisTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  verdictCard: {
-    padding: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-  },
-  verdictText: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  statsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  statItem: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#11181C',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: Palette.textMuted,
-  },
-  cardFinding: {
-    gap: 6,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Palette.cardBorder,
-    padding: 12,
-    backgroundColor: Palette.surface,
-  },
-  cardFindingBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  cardFindingBadgeDanger: {
-    backgroundColor: 'rgba(217, 48, 37, 0.16)',
-  },
-  cardFindingBadgeWarning: {
-    backgroundColor: 'rgba(196, 127, 0, 0.16)',
-  },
-  cardFindingBadgeText: {
-    fontSize: 12,
-    color: '#11181C',
-  },
-  cardFindingEngine: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  cardFindingThreat: {
-    fontSize: 14,
-    color: Palette.textMuted,
   },
 });

@@ -13,10 +13,10 @@ type Props = {
 };
 
 const verdictLabel: Record<UrlVerdict, string> = {
-  safe: '安全と判定',
-  warning: '注意が必要',
-  danger: '危険なリンク',
-  unknown: '判定保留',
+  safe: '✓ 安全なリンク',
+  warning: '⚠️ 注意が必要',
+  danger: '⛔ 危険なリンク',
+  unknown: '❓ 判定できません',
 };
 
 const verdictColor: Record<UrlVerdict, string> = {
@@ -94,20 +94,35 @@ const InternalListWarning = memo(function InternalListWarning({
 
 export const ScanResultCard = memo(function ScanResultCard({ result }: Props) {
   const findings = result.engineFindings ?? [];
-  const summary = useMemo(() => {
+  const summaryConfig = useMemo(() => {
     if (result.status !== 'completed') {
-      return 'VirusTotalの解析結果を取得中です。数秒後に再度スキャンしてください。';
+      return {
+        title: 'VirusTotalの解析結果を取得中です。',
+        description: '数秒後に再度スキャンしてください。'
+      };
     }
 
     switch (result.verdict) {
       case 'danger':
-        return '複数のエンジンが危険と判定しました。送金リンクや認証情報の入力は避けてください。';
+        return {
+          title: '🚨 このリンクは危険です',
+          description: '複数のセキュリティエンジンがこのリンクを危険と判定しました。個人情報の入力、送金、ログインなどは絶対に行わないでください。'
+        };
       case 'warning':
-        return '未知または疑わしい兆候が検出されています。アクセス前に送信元を再確認してください。';
+        return {
+          title: '⚠️ このリンクには注意が必要です',
+          description: '疑わしい兆候が検出されています。送信元が本当に信頼できるか、URLが正しいかを慎重に確認してからアクセスしてください。'
+        };
       case 'safe':
-        return '既知の脅威は検出されませんでしたが、不審な挙動に注意してください。';
+        return {
+          title: '✅ このリンクは安全そうです',
+          description: '既知の脅威は検出されませんでしたが、念のため不審な挙動がないか注意してください。'
+        };
       default:
-        return '十分な情報が得られていません。時間を置いて再スキャンするか、別の方法で確認してください。';
+        return {
+          title: 'ℹ️ 判定に十分な情報が得られませんでした',
+          description: '時間を置いて再スキャンするか、別の方法で安全性を確認することをお勧めします。'
+        };
     }
   }, [result.status, result.verdict]);
 
@@ -121,17 +136,24 @@ export const ScanResultCard = memo(function ScanResultCard({ result }: Props) {
       <ThemedText type="title" style={[styles.verdictTitle, { color: verdictColor[result.verdict] }]}>
         {verdictLabel[result.verdict]}
       </ThemedText>
-      <ThemedText style={styles.summary}>{summary}</ThemedText>
+      <View style={styles.summaryContainer}>
+        <ThemedText type="defaultSemiBold" style={styles.summaryTitle}>
+          {summaryConfig.title}
+        </ThemedText>
+        <ThemedText style={styles.summaryDescription}>
+          {summaryConfig.description}
+        </ThemedText>
+      </View>
       <View style={styles.statsRow}>
-        <StatBadge label="危険" value={result.stats.malicious} tone="danger" />
-        <StatBadge label="注意" value={result.stats.suspicious} tone="warning" />
-        <StatBadge label="安全" value={result.stats.harmless} tone="neutral" />
-        <StatBadge label="未検出" value={result.stats.undetected} tone="neutral" />
-        <StatBadge label="タイムアウト" value={result.stats.timeout} tone="warning" />
+        <StatBadge label="危険判定" value={result.stats.malicious} tone="danger" />
+        <StatBadge label="要注意" value={result.stats.suspicious} tone="warning" />
+        <StatBadge label="安全判定" value={result.stats.harmless} tone="neutral" />
+        <StatBadge label="検出なし" value={result.stats.undetected} tone="neutral" />
+        <StatBadge label="判定不能" value={result.stats.timeout} tone="warning" />
         <InfoTooltip
           title="判定値について"
-          description="危険/注意/安全/未検出は各ウイルス対策エンジンが下した評価の件数です。タイムアウトは判定が完了しなかった件数を表します。"
-          placement="bottom"
+          description="各数値は、複数のセキュリティエンジンによる評価の件数を示しています。危険判定・要注意が多いほどリスクが高く、安全判定が多いほど安全性が高いことを表します。検出なしは脅威が見つからなかった件数、判定不能は判定が完了しなかった件数です。"
+          placement="top-left"
         />
       </View>
       {result.detailsUrl ? (
@@ -161,7 +183,16 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
   },
-  summary: {
+  summaryContainer: {
+    gap: 8,
+  },
+  summaryTitle: {
+    fontSize: 16,
+    lineHeight: 22,
+    color: '#11181C',
+  },
+  summaryDescription: {
+    fontSize: 15,
     lineHeight: 22,
     color: Palette.textMuted,
   },

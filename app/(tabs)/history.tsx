@@ -19,9 +19,9 @@ import { Palette } from '@/constants/theme';
 import type { ScanHistoryEntry } from '@/features/scan-history/history-context';
 import { useScanHistory } from '@/features/scan-history/hooks/use-scan-history';
 import { useSettings } from '@/features/settings/hooks/use-settings';
+import { ScanResultCard } from '@/features/url-scan/components/scan-result-card';
 import { isVirusTotalConfigured } from '@/services/config/api-key-provider';
 import type { ClassifiedPayload } from '@/services/payload-classifier/types';
-import type { UrlVerdict } from '@/services/url-analysis';
 import { analyzeUrl } from '@/services/url-analysis';
 
 function formatTimestamp(timestamp: number) {
@@ -45,35 +45,6 @@ const kindLabel: Record<ClassifiedPayload['classification']['kind'], string> = {
   text: 'テキスト',
 };
 
-const verdictLabel: Record<UrlVerdict, string> = {
-  danger: '危険',
-  warning: '注意',
-  safe: '安全',
-  unknown: '判定保留',
-};
-
-const verdictBadgeColors: Record<UrlVerdict, { backgroundColor: string; borderColor: string; textColor: string }> = {
-  danger: {
-    backgroundColor: 'rgba(217, 48, 37, 0.12)',
-    borderColor: 'rgba(217, 48, 37, 0.32)',
-    textColor: Palette.danger,
-  },
-  warning: {
-    backgroundColor: 'rgba(249, 171, 0, 0.12)',
-    borderColor: 'rgba(249, 171, 0, 0.28)',
-    textColor: Palette.warning,
-  },
-  safe: {
-    backgroundColor: 'rgba(21, 128, 61, 0.12)',
-    borderColor: 'rgba(21, 128, 61, 0.28)',
-    textColor: Palette.success,
-  },
-  unknown: {
-    backgroundColor: 'rgba(91, 103, 131, 0.12)',
-    borderColor: 'rgba(91, 103, 131, 0.24)',
-    textColor: Palette.textMuted,
-  },
-};
 
 export default function HistoryScreen() {
   const { entries, clearHistory, updateEntryAnalysis } = useScanHistory();
@@ -127,7 +98,7 @@ export default function HistoryScreen() {
   }, [riskDialog, hideRiskDialog]);
 
   const handleOpenUrl = useCallback(
-    (entry: ScanHistoryEntry) => {
+    async (entry: ScanHistoryEntry) => {
       const classification = entry.payload.classification;
       if (classification.kind !== 'url') {
         return;
@@ -142,6 +113,10 @@ export default function HistoryScreen() {
         );
       };
 
+      // 内部リスト照会
+      const { checkInternalListOnly } = await import('@/services/url-analysis');
+      const internalListResult = await checkInternalListOnly(classification.normalizedUrl);
+
       // VirusTotal設定がオフの場合の確認
       if (!useVirusTotal) {
         setRiskDialog({
@@ -154,8 +129,16 @@ export default function HistoryScreen() {
         return;
       }
 
-      // 判定が行われていない場合の確認
-      if (!hasAnalysis) {
+      // 判定が行われていない場合でも内部リストの結果を考慮
+      const requiresPrompt =
+        alwaysShowStrongWarning ||
+        verdict === 'danger' ||
+        verdict === 'warning' ||
+        internalListResult?.listed;
+
+      // VirusTotal判定がない場合でも内部リストに該当する場合は警告を出す
+      if (!hasAnalysis && !internalListResult?.listed) {
+        // 内部リストにも該当しない場合は判定を推奨
         setRiskDialog({
           visible: true,
           tone: 'warning',
@@ -166,25 +149,28 @@ export default function HistoryScreen() {
         return;
       }
 
-      const requiresPrompt =
-        alwaysShowStrongWarning || verdict === 'danger' || verdict === 'warning';
-
       if (requiresPrompt) {
         let message =
           '送金リンクやディープリンクの可能性があります。続行する前に内容を必ず確認してください。';
         let tone: 'danger' | 'warning' | 'info' = 'warning';
+
         if (verdict === 'danger') {
           message = 'VirusTotal で危険と判定されたリンクです。内容を十分に確認した上で続行してください。';
           tone = 'danger';
         } else if (verdict === 'warning') {
           message = 'VirusTotal で注意が必要と判定されています。送信元を再確認し十分に注意してください。';
           tone = 'warning';
+        } else if (internalListResult?.listed) {
+          const serviceName = internalListResult.serviceName || 'このサービス';
+          const notice = internalListResult.notice || '内容を十分に確認してください。';
+          message = `${serviceName}のリンクが検出されました。${notice}\n\n続行する前に、送金や個人情報の入力が必要でないか確認してください。`;
+          tone = 'warning';
         }
 
         setRiskDialog({
           visible: true,
           tone,
-          title: '安全性の確認',
+          title: internalListResult?.listed ? '登録済みサービスの確認' : '安全性の確認',
           message,
           onConfirm: proceed,
         });
@@ -297,11 +283,7 @@ export default function HistoryScreen() {
               const isPhone = kind === 'phone';
               const isWifi = kind === 'wifi';
               const showActions = isUrl || isPhone || isWifi;
-              const verdict = entry.analysis?.verdict;
-              const badgePalette = verdictBadgeColors[verdict ?? 'unknown'];
-              const verdictLabelDisplay = verdict ? verdictLabel[verdict] : null;
-              const primaryFinding = entry.analysis?.engineFindings?.[0];
-              const isDanger = verdict === 'danger';
+              const isDanger = entry.analysis?.verdict === 'danger';
               const isSubmittingAnalysis = analyzingId === entry.id;
 
               return (
@@ -314,23 +296,6 @@ export default function HistoryScreen() {
                     </ThemedText>
                     <ThemedText style={styles.cardTimestamp}>{formatTimestamp(scannedAt)}</ThemedText>
                   </View>
-                  {verdictLabelDisplay ? (
-                    <View
-                      style={[
-                        styles.verdictBadge,
-                        {
-                          backgroundColor: badgePalette.backgroundColor,
-                          borderColor: badgePalette.borderColor,
-                        },
-                      ]}>
-                      <ThemedText
-                        type="defaultSemiBold"
-                        style={[styles.verdictBadgeText, { color: badgePalette.textColor }]}
-                      >
-                        {verdictLabelDisplay}
-                      </ThemedText>
-                    </View>
-                  ) : null}
                   <ThemedText type="title" style={styles.cardTitle}>
                     {summary.title}
                   </ThemedText>
@@ -351,22 +316,34 @@ export default function HistoryScreen() {
                   {showActions ? (
                     <View style={styles.cardActions}>
                       {isUrl ? (
-                        <Pressable
-                          style={({ pressed }) => [
-                            styles.primaryActionButton,
-                            pressed ? styles.primaryActionButtonPressed : null,
-                            isSubmittingAnalysis ? styles.disabledButton : null,
-                          ]}
-                          disabled={isSubmittingAnalysis}
-                          onPress={() => handleAnalyzeUrl(entry)}>
-                          {isSubmittingAnalysis ? (
-                            <ActivityIndicator size="small" color="#FFFFFF" />
-                          ) : (
-                            <ThemedText style={styles.primaryActionLabel}>
-                              安全性を判定する
-                            </ThemedText>
+                        <>
+                          <Pressable
+                            style={({ pressed }) => [
+                              styles.primaryActionButton,
+                              pressed ? styles.primaryActionButtonPressed : null,
+                              isSubmittingAnalysis ? styles.disabledButton : null,
+                            ]}
+                            disabled={isSubmittingAnalysis}
+                            onPress={() => handleAnalyzeUrl(entry)}>
+                            {isSubmittingAnalysis ? (
+                              <ActivityIndicator size="small" color="#FFFFFF" />
+                            ) : (
+                              <ThemedText style={styles.primaryActionLabel}>
+                                安全性を判定する
+                              </ThemedText>
+                            )}
+                          </Pressable>
+                          {!entry.analysis && (
+                            <Pressable
+                              style={({ pressed }) => [
+                                styles.actionButton,
+                                pressed ? styles.actionButtonPressed : null,
+                              ]}
+                              onPress={() => handleOpenUrl(entry)}>
+                              <ThemedText style={styles.actionLabel}>リンクを開く</ThemedText>
+                            </Pressable>
                           )}
-                        </Pressable>
+                        </>
                       ) : null}
                       {isPhone ? (
                         <Pressable
@@ -390,7 +367,7 @@ export default function HistoryScreen() {
                       ) : null}
                     </View>
                   ) : null}
-                  {expandedAnalysisId === entry.id && entry.analysis ? (
+                  {expandedAnalysisId === entry.id && entry.analysis && isUrl ? (
                     <View style={styles.analysisResults}>
                       <View style={styles.analysisHeader}>
                         <ThemedText type="subtitle" style={styles.analysisTitle}>
@@ -400,68 +377,21 @@ export default function HistoryScreen() {
                           <ThemedText style={styles.collapseButton}>閉じる</ThemedText>
                         </Pressable>
                       </View>
-                      <View
-                        style={[
-                          styles.verdictCard,
-                          verdict === 'danger' && styles.verdictCardDanger,
-                          verdict === 'warning' && styles.verdictCardWarning,
-                          verdict === 'safe' && styles.verdictCardSafe,
-                        ]}>
-                        <ThemedText
-                          type="defaultSemiBold"
-                          style={[
-                            styles.verdictText,
-                            { color: badgePalette.textColor }
-                          ]}>
-                          {verdictLabelDisplay}
-                        </ThemedText>
-                      </View>
-                      {entry.analysis.stats ? (
-                        <View style={styles.statsRow}>
-                          <View style={styles.statItem}>
-                            <ThemedText style={styles.statValue}>{entry.analysis.stats.malicious}</ThemedText>
-                            <ThemedText style={styles.statLabel}>危険</ThemedText>
-                          </View>
-                          <View style={styles.statItem}>
-                            <ThemedText style={styles.statValue}>{entry.analysis.stats.suspicious}</ThemedText>
-                            <ThemedText style={styles.statLabel}>注意</ThemedText>
-                          </View>
-                          <View style={styles.statItem}>
-                            <ThemedText style={styles.statValue}>{entry.analysis.stats.harmless}</ThemedText>
-                            <ThemedText style={styles.statLabel}>安全</ThemedText>
-                          </View>
-                          <View style={styles.statItem}>
-                            <ThemedText style={styles.statValue}>{entry.analysis.stats.undetected}</ThemedText>
-                            <ThemedText style={styles.statLabel}>未検出</ThemedText>
-                          </View>
-                        </View>
-                      ) : null}
-                      {primaryFinding ? (
-                        <View style={styles.cardFinding}>
-                          <View
-                            style={[
-                              styles.cardFindingBadge,
-                              primaryFinding.tone === 'danger'
-                                ? styles.cardFindingBadgeDanger
-                                : styles.cardFindingBadgeWarning,
-                            ]}>
-                            <ThemedText type="defaultSemiBold" style={styles.cardFindingBadgeText}>
-                              {primaryFinding.categoryLabel}
-                            </ThemedText>
-                          </View>
-                          <ThemedText style={styles.cardFindingEngine}>
-                            {primaryFinding.engine}
-                          </ThemedText>
-                          {primaryFinding.threat ? (
-                            <ThemedText style={styles.cardFindingThreat}>
-                              {primaryFinding.threat}
-                            </ThemedText>
-                          ) : null}
-                        </View>
-                      ) : null}
+                      <ScanResultCard
+                        result={{
+                          id: entry.id,
+                          submittedUrl: classification.normalizedUrl,
+                          status: entry.analysis.status,
+                          verdict: entry.analysis.verdict,
+                          provider: entry.analysis.provider,
+                          stats: entry.analysis.stats || { harmless: 0, malicious: 0, suspicious: 0, undetected: 0, timeout: 0 },
+                          detailsUrl: entry.analysis.detailsUrl,
+                          engineFindings: entry.analysis.engineFindings,
+                        }}
+                      />
                     </View>
                   ) : null}
-                  {isUrl && expandedAnalysisId === entry.id ? (
+                  {isUrl && expandedAnalysisId === entry.id && entry.analysis ? (
                     <View style={styles.cardActions}>
                       <Pressable
                         style={({ pressed }) => [
@@ -605,16 +535,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Palette.textMuted,
   },
-  verdictBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  verdictBadgeText: {
-    fontSize: 12,
-  },
   cardTitle: {
     fontSize: 20,
     lineHeight: 26,
@@ -640,38 +560,6 @@ const styles = StyleSheet.create({
     fontFamily: 'ui-monospace',
     fontSize: 14,
     lineHeight: 20,
-  },
-  cardFinding: {
-    gap: 6,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Palette.cardBorder,
-    padding: 12,
-    backgroundColor: Palette.surfaceMuted,
-  },
-  cardFindingBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  cardFindingBadgeDanger: {
-    backgroundColor: 'rgba(217, 48, 37, 0.16)',
-  },
-  cardFindingBadgeWarning: {
-    backgroundColor: 'rgba(196, 127, 0, 0.16)',
-  },
-  cardFindingBadgeText: {
-    fontSize: 12,
-    color: '#11181C',
-  },
-  cardFindingEngine: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  cardFindingThreat: {
-    fontSize: 14,
-    color: Palette.textMuted,
   },
   cardActions: {
     flexDirection: 'row',
@@ -732,45 +620,5 @@ const styles = StyleSheet.create({
   collapseButton: {
     fontSize: 14,
     color: Palette.primary,
-  },
-  verdictCard: {
-    padding: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-  },
-  verdictCardDanger: {
-    backgroundColor: 'rgba(217, 48, 37, 0.12)',
-    borderColor: 'rgba(217, 48, 37, 0.32)',
-  },
-  verdictCardWarning: {
-    backgroundColor: 'rgba(249, 171, 0, 0.12)',
-    borderColor: 'rgba(249, 171, 0, 0.28)',
-  },
-  verdictCardSafe: {
-    backgroundColor: 'rgba(21, 128, 61, 0.12)',
-    borderColor: 'rgba(21, 128, 61, 0.28)',
-  },
-  verdictText: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  statsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  statItem: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#11181C',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: Palette.textMuted,
   },
 });

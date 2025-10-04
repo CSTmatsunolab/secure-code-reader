@@ -20,6 +20,7 @@ import { QrCameraView } from '@/features/qr-capture/components/qr-camera-view';
 import { useQrScanner } from '@/features/qr-capture/hooks/use-qr-scanner';
 import { useScanHistory } from '@/features/scan-history/hooks/use-scan-history';
 import { useSettings } from '@/features/settings/hooks/use-settings';
+import { ScanResultCard } from '@/features/url-scan/components/scan-result-card';
 import { isVirusTotalConfigured } from '@/services/config/api-key-provider';
 import { classifyQrPayload } from '@/services/payload-classifier/parser';
 import type { ClassifiedPayload } from '@/services/payload-classifier/types';
@@ -184,8 +185,16 @@ export default function ScanScreen() {
               return;
             }
 
-            // 判定が行われていない場合の確認
-            if (!hasAnalysis) {
+            // 判定が行われていない場合でも内部リストの結果を考慮
+            const requiresPrompt =
+              alwaysShowStrongWarning ||
+              verdict === 'danger' ||
+              verdict === 'warning' ||
+              internalListResult?.listed;
+
+            // VirusTotal判定がない場合でも内部リストに該当する場合は警告を出す
+            if (!hasAnalysis && !internalListResult?.listed) {
+              // 内部リストにも該当しない場合は判定を推奨
               setRiskDialog({
                 visible: true,
                 tone: 'warning',
@@ -195,12 +204,6 @@ export default function ScanScreen() {
               });
               return;
             }
-
-            const requiresPrompt =
-              alwaysShowStrongWarning ||
-              verdict === 'danger' ||
-              verdict === 'warning' ||
-              internalListResult?.listed; // 内部リストにある場合も確認を促す
 
             if (requiresPrompt) {
               let message =
@@ -397,7 +400,11 @@ export default function ScanScreen() {
             isLoadingPrimaryAction={isCheckingInternalList}
             onAnalyzeUrl={classifiedPayload.classification.kind === 'url' && useVirusTotal ? handleAnalyzeUrl : undefined}
             isAnalyzing={isAnalyzingUrl}
-            analysisResult={latestAnalysisResult}
+            analysisResultCard={
+              latestAnalysisResult && classifiedPayload.classification.kind === 'url' ? (
+                <ScanResultCard result={latestAnalysisResult} />
+              ) : null
+            }
           />
         ) : null}
         {isDetailsVisible && classifiedPayload?.classification.kind === 'url' && !useVirusTotal ? (

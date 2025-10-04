@@ -8,7 +8,7 @@ import { Palette } from '@/constants/theme';
 interface Props {
   title: string;
   description: string;
-  placement?: 'top' | 'bottom';
+  placement?: 'top' | 'bottom' | 'top-left' | 'bottom-left';
   children?: ReactNode;
 }
 
@@ -30,7 +30,13 @@ export const InfoTooltip = memo(function InfoTooltip({
       </Pressable>
       {visible ? (
         <ThemedView
-          style={[styles.tooltip, placement === 'top' ? styles.tooltipTop : styles.tooltipBottom]}>
+          style={[
+            styles.tooltip,
+            placement === 'top' && styles.tooltipTop,
+            placement === 'bottom' && styles.tooltipBottom,
+            placement === 'top-left' && styles.tooltipTopLeft,
+            placement === 'bottom-left' && styles.tooltipBottomLeft,
+          ]}>
           <ThemedText type="defaultSemiBold" style={styles.tooltipTitle}>
             {title}
           </ThemedText>
@@ -86,6 +92,14 @@ const styles = StyleSheet.create({
   tooltipBottom: {
     top: 32,
     right: -16,
+  },
+  tooltipTopLeft: {
+    bottom: 32,
+    right: -80,
+  },
+  tooltipBottomLeft: {
+    top: 32,
+    right: -80,
   },
   tooltipTitle: {
     fontSize: 14,
