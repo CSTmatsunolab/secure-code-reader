@@ -30,14 +30,11 @@ Secure Code Reader は、QR コードに埋め込まれたリンクや設定情�
    {
      "virusTotal": {
        "apiKey": "YOUR_VIRUSTOTAL_API_KEY"
-     },
-     "bff": {
-       "baseUrl": ""
      }
    }
    ```
    - `bff.baseUrl` は空のままにすると、アプリが直接 VirusTotal API v3 を呼び出します。
-   - 後日 BFF を導入する場合に備えた項目です。現状は空で問題ありません。
+   - BFF を利用する場合は、`baseUrl` と `apiKey` を適切に設定してください。
 4. **開発サーバーを起動**
    ```bash
    npm run start
@@ -69,7 +66,6 @@ Secure Code Reader は、QR コードに埋め込まれたリンクや設定情�
 ### 設定タブ (Settings)
 - **VirusTotal を利用して詳細判定**: VirusTotal API を使用するかどうかを切り替えます。
 - **強警告を常に表示**: 送金・ディープリンクを開く際に必ず確認ダイアログを出します。
-- **プライバシーポリシー**: `app/(tabs)/settings.tsx` 内の URL を任意の公開ページに差し替えてください。
 
 ## フォルダ構成 (抜粋)
 ```
@@ -98,7 +94,6 @@ config/local-api-keys.json … ローカル用 API キー (Git 管理外想定)
 - スキャン履歴と設定の永続化 (SecureStore など)
 
 ## 注意事項
-- VirusTotal API キーは配布用ビルドに含めないでください。公開時は必ず BFF などサーバー側で秘匿してください。
 - 本アプリはリスク判定を支援するツールです。最終的な安全性判断はユーザーの責任で行ってください。
 
 ---
