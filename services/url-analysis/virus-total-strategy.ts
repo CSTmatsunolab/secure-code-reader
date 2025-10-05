@@ -4,10 +4,12 @@ import type {
   AnalysisStatus,
   EngineFinding,
   EngineTone,
+  InternalListResult,
   ScanStats,
   UrlAnalysisResult,
   UrlVerdict,
 } from './types';
+import { checkLocalInternalList } from './local-internal-list';
 
 //BFFが設定されているときにはVirusTotalのAPIを直接使わない
 const getApiBaseUrl = () => {
@@ -166,7 +168,7 @@ const normalizeEngineFindings = (
   return findings.length > 0 ? findings : undefined;
 };
 
-const normalizeResult = (analysis: VirusTotalAnalysisResponse, submittedUrl: string): UrlAnalysisResult => {
+const normalizeResult = (analysis: VirusTotalAnalysisResponse, submittedUrl: string, internalListResult?: InternalListResult): UrlAnalysisResult => {
   if (!analysis.data || !analysis.data.id) {
     throw new Error('VirusTotalの解析レスポンスを解釈できませんでした。');
   }
@@ -185,6 +187,7 @@ const normalizeResult = (analysis: VirusTotalAnalysisResponse, submittedUrl: str
     startedAt: analysis.data.attributes?.date ? analysis.data.attributes?.date * 1000 : undefined,
     detailsUrl: buildDetailsUrl(analysis.data.id),
     engineFindings,
+    internalListResult,
     raw: analysis,
   };
 };
@@ -231,8 +234,6 @@ export const analyzeViaVirusTotal = async (url: string): Promise<UrlAnalysisResu
   }
 
   const fetchAnalysis = async (): Promise<VirusTotalAnalysisResponse> => {
-    const analysisHeaders = bffBaseUrl ? {} : { 'x-apikey': getVirusTotalApiKey()! };
-    
     const response = await fetch(`${apiBaseUrl}/analyses/${analysisId}`, {
       method: 'GET',
       headers: bffBaseUrl ? {} : { 'x-apikey': getVirusTotalApiKey()! },
@@ -259,5 +260,9 @@ export const analyzeViaVirusTotal = async (url: string): Promise<UrlAnalysisResu
     attempts += 1;
   }
 
-  return result;
+  // VirusTotal解析完了後にローカル内部リスト照会を実行
+  const internalListResult = checkLocalInternalList(url);
+
+  // 最終結果に内部リストの結果を含めて再構築
+  return normalizeResult(analysisJson, url, internalListResult);
 };

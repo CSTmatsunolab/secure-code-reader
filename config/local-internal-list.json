@@ -1,0 +1,57 @@
+{
+  "paymentServices": [
+    {
+      "serviceName": "PayPay",
+      "category": "決済サービス",
+      "domains": [
+        "paypay.ne.jp",
+        "pay-web.paypay.ne.jp"
+      ],
+      "notice": "PayPayの決済QRコードです。安全に利用できます。"
+    },
+    {
+      "serviceName": "楽天ペイ",
+      "category": "決済サービス",
+      "domains": [
+        "pay.rakuten.co.jp",
+        "checkout.rakuten.co.jp"
+      ],
+      "notice": "楽天ペイの決済QRコードです。安全に利用できます。"
+    },
+    {
+      "serviceName": "LINE Pay",
+      "category": "決済サービス",
+      "domains": [
+        "line-pay.com",
+        "pay.line.me"
+      ],
+      "notice": "LINE Payの決済QRコードです。安全に利用できます。"
+    },
+    {
+      "serviceName": "au PAY",
+      "category": "決済サービス",
+      "domains": [
+        "aupay.au.com",
+        "aupay.wallet.auone.jp"
+      ],
+      "notice": "au PAYの決済QRコードです。安全に利用できます。"
+    },
+    {
+      "serviceName": "d払い",
+      "category": "決済サービス",
+      "domains": [
+        "service.smt.docomo.ne.jp"
+      ],
+      "notice": "d払いの決済QRコードです。安全に利用できます。"
+    },
+    {
+      "serviceName": "メルペイ",
+      "category": "決済サービス",
+      "domains": [
+        "merpay.com",
+        "pay.mercari.jp"
+      ],
+      "notice": "メルペイの決済QRコードです。安全に利用できます。"
+    }
+  ]
+}
